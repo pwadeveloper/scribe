@@ -198,39 +198,67 @@ export const STARTER_ESSAY: DocumentItem = {
 <blockquote>“A sentence should contain no unnecessary words, a paragraph no unnecessary sentences, for the same reason that a drawing should have no unnecessary lines.”</blockquote>`,
 };
 
+export interface NewWorkOptions {
+  includeParts?: boolean;
+  includePrologue?: boolean;
+  includeOpeningSlugline?: boolean;
+  includeStarterHeadings?: boolean;
+  openInTimeline?: boolean;
+  startInFocusMode?: boolean;
+  pinToLibrary?: boolean;
+  wordGoal?: number;
+}
+
 export function createNewWorkItem(
   kind: WorkKind,
   title: string,
-  options?: { includeParts?: boolean }
+  options?: NewWorkOptions
 ): DocumentItem {
   const now = Date.now();
   const id = `doc-${now}-${Math.random().toString(36).slice(2, 7)}`;
+  const pinned = Boolean(options?.pinToLibrary);
 
   if (kind === 'book') {
     const partId = options?.includeParts ? `part-${now}-1` : undefined;
+    const prologueId = `unit-${now}-0`;
     const ch1Id = `unit-${now}-1`;
+    const units = [
+      ...(options?.includePrologue
+        ? [
+            {
+              id: prologueId,
+              unitKind: 'prologue' as const,
+              title: 'Prologue',
+              partId,
+              synopsis: '',
+              contentHtml: '<p><br></p>',
+              updatedAt: now,
+            },
+          ]
+        : []),
+      {
+        id: ch1Id,
+        unitKind: 'chapter' as const,
+        title: 'Chapter One',
+        partId,
+        synopsis: '',
+        contentHtml: '<p><br></p>',
+        updatedAt: now,
+      },
+    ];
+
     return {
       id,
       kind: 'book',
       title: title.trim() || 'Untitled Novel',
-      pinned: false,
-      wordGoal: 1500,
+      pinned,
+      wordGoal: options?.wordGoal ?? 1500,
       contentHtml: '',
       parts: options?.includeParts
         ? [{ id: partId!, title: 'Part I' }]
         : [],
-      activeUnitId: ch1Id,
-      units: [
-        {
-          id: ch1Id,
-          unitKind: 'chapter',
-          title: 'Chapter One',
-          partId,
-          synopsis: '',
-          contentHtml: '<p><br></p>',
-          updatedAt: now,
-        },
-      ],
+      activeUnitId: options?.includePrologue ? prologueId : ch1Id,
+      units,
       createdAt: now,
       updatedAt: now,
     };
@@ -238,23 +266,25 @@ export function createNewWorkItem(
 
   if (kind === 'screenplay') {
     const sc1Id = `scene-${now}-1`;
+    const useSlug = options?.includeOpeningSlugline !== false;
     return {
       id,
       kind: 'screenplay',
       title: (title.trim() || 'UNTITLED SCREENPLAY').toUpperCase(),
-      pinned: false,
-      wordGoal: 1000,
+      pinned,
+      wordGoal: options?.wordGoal ?? 1000,
       contentHtml: '',
       activeUnitId: sc1Id,
       units: [
         {
           id: sc1Id,
           unitKind: 'scene',
-          slugline: 'INT. LOCATION - DAY',
+          slugline: useSlug ? 'INT. LOCATION - DAY' : '',
           title: 'Opening Scene',
           synopsis: '',
-          contentHtml:
-            '<p data-sp-type="slugline">INT. LOCATION - DAY</p><p data-sp-type="action"><br></p>',
+          contentHtml: useSlug
+            ? '<p data-sp-type="slugline">INT. LOCATION - DAY</p><p data-sp-type="action"><br></p>'
+            : '<p data-sp-type="slugline"><br></p>',
           updatedAt: now,
         },
       ],
@@ -263,13 +293,17 @@ export function createNewWorkItem(
     };
   }
 
+  const starterEssayHtml = options?.includeStarterHeadings
+    ? '<h2>I. Premise</h2><p><br></p><h2>II. Exploration</h2><p><br></p><h2>III. Conclusion</h2><p><br></p>'
+    : '<p><br></p>';
+
   return {
     id,
     kind: 'essay',
     title: title.trim() || '',
-    pinned: false,
-    wordGoal: 500,
-    contentHtml: '<p><br></p>',
+    pinned,
+    wordGoal: options?.wordGoal ?? 500,
+    contentHtml: starterEssayHtml,
     createdAt: now,
     updatedAt: now,
   };

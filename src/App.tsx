@@ -18,6 +18,7 @@ import {
   saveDocuments,
   hydrateDocumentsFromIndexedDB,
   createNewWorkItem,
+  NewWorkOptions,
 } from './storage';
 import {
   computeDocumentTotalMetrics,
@@ -27,9 +28,12 @@ import {
   extractScreenplayCharacters,
   extractScreenplayLocations,
   getUnitBadgeLabel,
+  escapeHtml,
   prepareScreenplayHtmlForExport,
   slugifyFilename,
+  titlePageToHtml,
 } from './editorUtils';
+import { TitlePageDialog } from './components/TitlePageDialog';
 import { TopBar } from './components/TopBar';
 import { SidebarDrawer } from './components/SidebarDrawer';
 import { RichEditor } from './components/RichEditor';
@@ -53,6 +57,7 @@ export const App: React.FC = () => {
   >(undefined);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [screenplayGuideOpen, setScreenplayGuideOpen] = useState(false);
+  const [titlePageOpen, setTitlePageOpen] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
 
@@ -413,7 +418,7 @@ export const App: React.FC = () => {
     (
       kind: WorkKind,
       title: string,
-      options?: { includeParts?: boolean }
+      options?: NewWorkOptions
     ) => {
       const newDoc = createNewWorkItem(kind, title, options);
       setDocuments((prev) => {
@@ -423,11 +428,18 @@ export const App: React.FC = () => {
       });
       setActiveDocId(newDoc.id);
       saveActiveDocIdSync(newDoc.id);
-      setViewMode('write');
+      if ((kind === 'book' || kind === 'screenplay') && options?.openInTimeline) {
+        setViewMode('birdseye');
+      } else {
+        setViewMode('write');
+      }
+      if (options?.startInFocusMode) {
+        updateSettings({ focusMode: 'paragraph' });
+      }
       setSidebarOpen(false);
       setIsTyping(false);
     },
-    [persistDocs]
+    [persistDocs, updateSettings]
   );
 
   const handleSelectDoc = useCallback((id: string) => {
@@ -633,7 +645,11 @@ export const App: React.FC = () => {
   };
 
   const handleExportHtml = () => {
-    const docTitle = activeDoc.title.trim() || 'Untitled Manuscript';
+    const docTitle = escapeHtml(activeDoc.title.trim() || 'Untitled Manuscript');
+    const opening =
+      activeDoc.kind === 'screenplay'
+        ? titlePageToHtml(activeDoc)
+        : `<h1>${docTitle}</h1>`;
     const combinedBody =
       activeDoc.kind === 'essay' || !activeDoc.units
         ? activeDoc.contentHtml
@@ -676,6 +692,7 @@ export const App: React.FC = () => {
     p[data-sp-type="transition"] { text-align: right; font-weight: bold; text-transform: uppercase; }
     p[data-sp-type="shot"] { font-weight: bold; text-transform: uppercase; margin-top: 1.5rem; }
     p[data-sp-type="centered"] { text-align: center; text-transform: uppercase; }
+    p[data-sp-type="cast-list"] { text-transform: uppercase; margin-top: 0.25rem; }
     p[data-sp-type="act-break"] { text-align: center; text-transform: uppercase; text-decoration: underline; font-weight: bold; margin-top: 2.5rem; }
     p[data-sp-type="lyrics"] { font-style: italic; margin-left: 15%; margin-right: 15%; margin-top: 0.15rem; }
     hr[data-sp-type="page-break"] { break-after: page; border: none; border-top: 1px dashed #ccc; }
@@ -683,10 +700,18 @@ export const App: React.FC = () => {
     .dual-dialogue p[data-sp-type="character"] { margin-left: 18%; }
     .dual-dialogue p[data-sp-type="parenthetical"] { margin-left: 10%; }
     .dual-dialogue p[data-sp-type="dialogue"], .dual-dialogue p[data-sp-type="lyrics"] { margin-left: 0; margin-right: 2%; }
+    .title-page { display: flex; flex-direction: column; min-height: 80vh; padding-top: 22vh; font-family: 'Courier Prime', 'Courier New', Courier, monospace; break-after: page; }
+    .title-page p { margin: 0 0 1rem; }
+    .title-page-center { text-align: center; }
+    .title-page-title { font-weight: bold; text-transform: uppercase; text-decoration: underline; margin-bottom: 2rem !important; }
+    .title-page-source { margin-top: 2rem !important; }
+    .title-page-footer { margin-top: auto; display: flex; justify-content: space-between; gap: 2rem; font-size: 0.9rem; }
+    .title-page-right { text-align: right; }
+    @media print { .title-page { min-height: 9in; padding-top: 3in; } body { background: #fff; } }
   </style>
 </head>
 <body>
-  <h1>${docTitle}</h1>
+  ${opening}
   ${combinedBody}
 </body>
 </html>`;
@@ -791,6 +816,9 @@ export const App: React.FC = () => {
           onUpdateDocSubtitle={(newSubtitle) =>
             updateActiveDocument((d) => ({ ...d, subtitle: newSubtitle }))
           }
+          onOpenTitlePage={
+            activeDoc.kind === 'screenplay' ? () => setTitlePageOpen(true) : undefined
+          }
           onAddUnit={(unitKind, partId, customLabel) =>
             handleAddUnit(unitKind, partId, customLabel, false)
           }
@@ -843,6 +871,7 @@ export const App: React.FC = () => {
           screenplayGuideOpen={screenplayGuideOpen}
           onCloseScreenplayGuide={() => setScreenplayGuideOpen(false)}
           onToggleScreenplayGuide={() => setScreenplayGuideOpen((v) => !v)}
+          onOpenTitlePage={() => setTitlePageOpen(true)}
         />
       )}
 
@@ -862,6 +891,21 @@ export const App: React.FC = () => {
         onClose={() => setNewWorkModalOpen(false)}
         onCreateWork={handleCreateWork}
       />
+
+      {activeDoc.kind === 'screenplay' && (
+        <TitlePageDialog
+          open={titlePageOpen}
+          doc={activeDoc}
+          onClose={() => setTitlePageOpen(false)}
+          onChangeTitle={(title) => updateActiveDocument((d) => ({ ...d, title }))}
+          onChangeTitlePage={(patch) =>
+            updateActiveDocument((d) => ({
+              ...d,
+              titlePage: { ...d.titlePage, ...patch },
+            }))
+          }
+        />
+      )}
 
       <ShortcutsModal
         open={shortcutsOpen}
