@@ -1,0 +1,452 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root,
+[data-theme="paper"] {
+  --bg-canvas: #FAF7F2;
+  --bg-surface: #F3EFE8;
+  --bg-elevated: #FFFFFF;
+  --bg-subtle: rgba(28, 25, 23, 0.04);
+  --bg-subtle-hover: rgba(28, 25, 23, 0.075);
+  --ink-1: #1C1917;
+  --ink-2: #524B44;
+  --ink-3: #857D74;
+  --ink-4: #A8A096;
+  --accent: #9A4B26;
+  --accent-soft: rgba(154, 75, 38, 0.12);
+  --selection-bg: rgba(154, 75, 38, 0.16);
+  --border-subtle: rgba(28, 25, 23, 0.08);
+  --border-strong: rgba(28, 25, 23, 0.15);
+  --caret-color: #9A4B26;
+
+  --elevation-raised:
+    0 0 0 1px rgb(28 25 23 / 0.06),
+    0 1px 3px rgb(28 25 23 / 0.05),
+    0 6px 16px -4px rgb(28 25 23 / 0.06);
+  --elevation-floating:
+    0 0 0 1px rgb(28 25 23 / 0.08),
+    0 4px 12px -2px rgb(28 25 23 / 0.08),
+    0 16px 32px -6px rgb(28 25 23 / 0.1);
+}
+
+[data-theme="sepia"] {
+  --bg-canvas: #F3ECE0;
+  --bg-surface: #EAE0D0;
+  --bg-elevated: #F8F3EA;
+  --bg-subtle: rgba(42, 33, 25, 0.05);
+  --bg-subtle-hover: rgba(42, 33, 25, 0.09);
+  --ink-1: #261E18;
+  --ink-2: #594C41;
+  --ink-3: #87786A;
+  --ink-4: #AA9B8C;
+  --accent: #8C3F19;
+  --accent-soft: rgba(140, 63, 25, 0.14);
+  --selection-bg: rgba(140, 63, 25, 0.18);
+  --border-subtle: rgba(42, 33, 25, 0.09);
+  --border-strong: rgba(42, 33, 25, 0.17);
+  --caret-color: #8C3F19;
+
+  --elevation-raised:
+    0 0 0 1px rgb(42 33 25 / 0.07),
+    0 1px 3px rgb(42 33 25 / 0.06),
+    0 6px 16px -4px rgb(42 33 25 / 0.07);
+  --elevation-floating:
+    0 0 0 1px rgb(42 33 25 / 0.09),
+    0 4px 12px -2px rgb(42 33 25 / 0.09),
+    0 16px 32px -6px rgb(42 33 25 / 0.12);
+}
+
+[data-theme="night"] {
+  --bg-canvas: #141312;
+  --bg-surface: #1B1A18;
+  --bg-elevated: #22201E;
+  --bg-subtle: rgba(235, 229, 220, 0.05);
+  --bg-subtle-hover: rgba(235, 229, 220, 0.09);
+  --ink-1: #EAE4DC;
+  --ink-2: #A8A199;
+  --ink-3: #756F68;
+  --ink-4: #524D47;
+  --accent: #D4845A;
+  --accent-soft: rgba(212, 132, 90, 0.16);
+  --selection-bg: rgba(212, 132, 90, 0.24);
+  --border-subtle: #262421;
+  --border-strong: #33302C;
+  --caret-color: #D4845A;
+
+  /* Dark mode flattens shadows to subtle 1px white rings */
+  --elevation-raised: 0 0 0 1px rgb(255 255 255 / 0.09);
+  --elevation-floating:
+    0 0 0 1px rgb(255 255 255 / 0.12),
+    0 12px 28px -6px rgb(0 0 0 / 0.55);
+}
+
+:root {
+  --border-hairline: 1px;
+  --z-header: 100;
+  --z-sidebar: 200;
+  --z-toolbar: 300;
+  --z-modal: 400;
+  --z-toast: 500;
+}
+
+@media only screen and (min-device-pixel-ratio: 2),
+  only screen and (min-resolution: 192dpi) {
+  :root {
+    --border-hairline: 0.5px;
+  }
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
+html,
+body {
+  background-color: var(--bg-canvas);
+  color: var(--ink-1);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-synthesis: none;
+  font-optical-sizing: auto;
+  margin: 0;
+  padding: 0;
+}
+
+/* Eliminate 300ms tap delay and prevent long-press text selection on controls */
+button,
+a,
+input,
+textarea,
+select,
+[role="button"] {
+  touch-action: manipulation;
+}
+
+button,
+[role="button"],
+kbd,
+select {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Native tactile press feedback on coarse/touch pointers */
+@media (pointer: coarse) {
+  button,
+  [role="button"] {
+    transition: transform 120ms ease-out, background-color 150ms ease-out, color 150ms ease-out;
+  }
+  button:active,
+  [role="button"]:active {
+    transform: scale(0.96);
+  }
+  /* Guarantee 16px floor on all form fields on mobile to prevent iOS Safari page zoom */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* Room for sticky header when scrolling to anchors or headings */
+[id],
+.vellum-editor h1,
+.vellum-editor h2,
+.vellum-editor h3 {
+  scroll-margin-top: 76px;
+}
+
+/* Disable transitions momentarily when switching themes */
+.theme-switching,
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition-duration: 0ms !important;
+}
+
+/* Focus ring rule: neutral outline with offset */
+:focus-visible {
+  outline: 1.5px solid var(--ink-2);
+  outline-offset: 2px;
+}
+
+.vellum-editor:focus,
+.vellum-editor:focus-visible,
+.vellum-title-input:focus,
+.vellum-title-input:focus-visible {
+  outline: none;
+}
+
+/* Rich text editor typography & rhythm */
+.vellum-editor {
+  caret-color: var(--caret-color);
+  overflow-wrap: break-word;
+  word-break: break-word;
+  font-kerning: normal;
+}
+
+.vellum-editor > * + * {
+  margin-block-start: 1.15em;
+}
+
+.vellum-editor h1 {
+  font-size: 1.75em;
+  line-height: 1.18;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+  text-wrap: balance;
+  margin-block-start: 1.5em;
+  margin-block-end: 0.45em;
+  color: var(--ink-1);
+}
+
+.vellum-editor h1:first-child,
+.vellum-editor h2:first-child,
+.vellum-editor h3:first-child,
+.vellum-editor p:first-child {
+  margin-block-start: 0;
+}
+
+.vellum-editor h2 {
+  font-size: 1.38em;
+  line-height: 1.24;
+  letter-spacing: -0.015em;
+  font-weight: 600;
+  text-wrap: balance;
+  margin-block-start: 1.4em;
+  margin-block-end: 0.4em;
+  color: var(--ink-1);
+}
+
+.vellum-editor h3 {
+  font-size: 1.15em;
+  line-height: 1.32;
+  letter-spacing: -0.01em;
+  font-weight: 600;
+  text-wrap: balance;
+  margin-block-start: 1.25em;
+  margin-block-end: 0.35em;
+  color: var(--ink-1);
+}
+
+.vellum-editor p {
+  margin-block: 0;
+}
+
+.vellum-editor blockquote {
+  border-inline-start: 2px solid var(--accent);
+  padding-inline-start: 1.15em;
+  margin-inline: 0;
+  color: var(--ink-2);
+  font-style: italic;
+}
+
+.vellum-editor ul {
+  list-style-type: disc;
+  padding-inline-start: 1.5em;
+}
+
+.vellum-editor ol {
+  list-style-type: decimal;
+  padding-inline-start: 1.5em;
+}
+
+.vellum-editor li + li {
+  margin-block-start: 0.35em;
+}
+
+.vellum-editor code {
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.86em;
+  background-color: var(--bg-subtle);
+  padding: 0.15em 0.38em;
+  border-radius: 5px;
+  color: var(--ink-1);
+}
+
+.vellum-editor pre {
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.86em;
+  line-height: 1.55;
+  background-color: var(--bg-surface);
+  padding: 1em 1.2em;
+  border-radius: 10px;
+  overflow-x: auto;
+  box-shadow: inset 0 0 0 var(--border-hairline) var(--border-subtle);
+}
+
+.vellum-editor pre code {
+  background: transparent;
+  padding: 0;
+  font-size: inherit;
+}
+
+.vellum-editor hr {
+  border: none;
+  height: var(--border-hairline);
+  background-color: var(--border-strong);
+  margin-block: 2.2em;
+  width: 35%;
+  margin-inline: auto;
+}
+
+.vellum-editor a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: from-font;
+  text-underline-offset: 0.18em;
+  text-decoration-skip-ink: auto;
+}
+
+/* ==========================================================================
+   Screenplay Mode Block Formatting (Slugline, Action, Character, Dialogue, etc.)
+   ========================================================================== */
+
+.vellum-editor[data-work-kind="screenplay"] p[data-sp-type="slugline"] {
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--ink-1);
+  margin-block-start: 1.75em;
+  margin-block-end: 0.65em;
+  padding-block-bottom: 0.25em;
+  border-bottom: var(--border-hairline) solid var(--border-subtle);
+}
+
+.vellum-editor[data-work-kind="screenplay"] p[data-sp-type="slugline"]:first-child {
+  margin-block-start: 0;
+}
+
+.vellum-editor[data-work-kind="screenplay"] p[data-sp-type="action"] {
+  margin-block-start: 0.95em;
+  color: var(--ink-1);
+}
+
+.vellum-editor[data-work-kind="screenplay"] p[data-sp-type="character"] {
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ink-1);
+  margin-block-start: 1.35em;
+  margin-block-end: 0.1em;
+  padding-inline-start: 30%;
+  padding-inline-end: 10%;
+}
+
+.vellum-editor[data-work-kind="screenplay"] p[data-sp-type="parenthetical"] {
+  font-style: italic;
+  color: var(--ink-2);
+  margin-block-start: 0.1em;
+  margin-block-end: 0.1em;
+  padding-inline-start: 23%;
+  padding-inline-end: 20%;
+}
+
+.vellum-editor[data-work-kind="screenplay"] p[data-sp-type="dialogue"] {
+  color: var(--ink-1);
+  margin-block-start: 0.12em;
+  margin-block-end: 0.2em;
+  padding-inline-start: 15%;
+  padding-inline-end: 15%;
+}
+
+.vellum-editor[data-work-kind="screenplay"] p[data-sp-type="transition"] {
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-align: end;
+  color: var(--ink-2);
+  margin-block-start: 1.35em;
+  margin-block-end: 0.8em;
+}
+
+@media (max-width: 640px) {
+  .vellum-editor[data-work-kind="screenplay"] p[data-sp-type="character"] {
+    padding-inline-start: 16%;
+    padding-inline-end: 4%;
+  }
+  .vellum-editor[data-work-kind="screenplay"] p[data-sp-type="parenthetical"] {
+    padding-inline-start: 10%;
+    padding-inline-end: 8%;
+  }
+  .vellum-editor[data-work-kind="screenplay"] p[data-sp-type="dialogue"] {
+    padding-inline-start: 6%;
+    padding-inline-end: 6%;
+  }
+}
+
+/* Empty editor placeholder */
+.vellum-editor[data-empty="true"]::before {
+  content: attr(data-placeholder);
+  color: var(--ink-4);
+  pointer-events: none;
+  position: absolute;
+  font-style: italic;
+}
+
+/* Focus Mode: Paragraph dimming */
+.vellum-editor[data-focus-mode="paragraph"] > * {
+  opacity: 0.24;
+  transition: opacity 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.vellum-editor[data-focus-mode="paragraph"] > .is-active-block {
+  opacity: 1;
+}
+
+/* Focus Mode: Deep / Sentence-like spotlight */
+.vellum-editor[data-focus-mode="deep"] > * {
+  opacity: 0.14;
+  transition: opacity 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.vellum-editor[data-focus-mode="deep"] > .is-adjacent-block {
+  opacity: 0.36;
+}
+
+.vellum-editor[data-focus-mode="deep"] > .is-active-block {
+  opacity: 1;
+}
+
+/* Scoped custom scrollbar for inner scroll containers; prevent scroll chaining */
+.vellum-scroller {
+  overscroll-behavior: contain;
+}
+
+.vellum-scroller::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.vellum-scroller::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body,
+  html {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  .vellum-editor > * {
+    opacity: 1 !important;
+  }
+}
