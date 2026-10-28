@@ -58,9 +58,10 @@ const TIER_LABEL: Record<ScreenplayBlockSpec['tier'], string> = {
 
 /**
  * Custom duotone geometric icons modeled after the v.1 capsule tab bar:
- * - When `selected`: renders inside a dark circular well with an emerald glow.
- * - When `hovered`: renders with crisp white + silver two-tone facets.
- * - When `idle`: renders with recessed zinc two-tone facets.
+ * - Adapts automatically to Paper (light), Sepia, and Night (dark) themes via CSS variables.
+ * - When `selected`: renders inside a circular well with a soft emerald/sage glow (`var(--good)`).
+ * - When `hovered`: renders with high-contrast two-tone facets (`var(--ink-1)` + `var(--ink-3)`).
+ * - When `idle`: renders with muted two-tone facets (`var(--ink-3)` + `var(--ink-4)`).
  */
 const GuideTabIcon: React.FC<{
   tabId: string;
@@ -68,15 +69,15 @@ const GuideTabIcon: React.FC<{
   hovered: boolean;
 }> = ({ tabId, selected, hovered }) => {
   const primary = selected
-    ? '#34D399'
+    ? 'var(--good)'
     : hovered
-    ? '#FAFAFA'
-    : '#8A8A93';
+    ? 'var(--ink-1)'
+    : 'var(--ink-3)';
   const secondary = selected
-    ? 'rgba(52, 211, 153, 0.38)'
+    ? 'color-mix(in srgb, var(--good) 38%, transparent)'
     : hovered
-    ? '#9CA3AF'
-    : '#52525B';
+    ? 'var(--ink-3)'
+    : 'var(--ink-4)';
 
   const renderGlyph = () => {
     switch (tabId) {
@@ -241,10 +242,10 @@ const GuideTabIcon: React.FC<{
       aria-hidden="true"
       style={{
         backgroundColor: selected
-          ? 'rgba(16, 185, 129, 0.14)'
+          ? 'color-mix(in srgb, var(--good) 16%, var(--bg-elevated))'
           : 'transparent',
         boxShadow: selected
-          ? 'inset 0 0 0 1px rgba(52, 211, 153, 0.28), 0 0 10px -1px rgba(52, 211, 153, 0.35)'
+          ? 'inset 0 0 0 1px color-mix(in srgb, var(--good) 34%, transparent), 0 0 10px -1px color-mix(in srgb, var(--good) 32%, transparent)'
           : 'none',
       }}
       className="relative flex size-5 shrink-0 items-center justify-center rounded-full transition-[background-color,box-shadow,transform] duration-200 ease-out"
@@ -640,15 +641,13 @@ export const ScreenplayGuide: React.FC<ScreenplayGuideProps> = ({
         </label>
       </div>
 
-      {/* v.1 Recessed Capsule Tab Bar */}
+      {/* v.1 Recessed Capsule Tab Bar (Theme-adaptive across Paper, Sepia, and Night) */}
       {!normalizedQuery && (
         <div className="mt-3 px-4">
           <div
             style={{
-              background:
-                'linear-gradient(180deg, #151518 0%, #1B1B1F 100%)',
-              boxShadow:
-                'inset 0 1.5px 3px rgba(0, 0, 0, 0.65), inset 0 0 0 1px rgba(255, 255, 255, 0.07), 0 1px 2px rgba(0, 0, 0, 0.08)',
+              background: 'var(--capsule-track-bg)',
+              boxShadow: 'var(--capsule-track-shadow)',
             }}
             className="relative flex items-center rounded-full p-1"
           >
@@ -661,9 +660,9 @@ export const ScreenplayGuide: React.FC<ScreenplayGuideProps> = ({
                 onClick={() => nudgeTabs(-1)}
                 style={{
                   background:
-                    'linear-gradient(90deg, #17171B 55%, rgba(23,23,27,0))',
+                    'linear-gradient(90deg, var(--bg-surface) 55%, transparent)',
                 }}
-                className=" absolute left-1 top-1 bottom-1 z-20 flex w-6 items-center justify-start rounded-l-full pl-1 text-[#A1A1AA] transition-colors hover:text-white active:scale-[0.96]"
+                className="absolute left-1 top-1 bottom-1 z-20 flex w-6 items-center justify-start rounded-l-full pl-1 text-[var(--ink-3)] transition-colors hover:text-[var(--ink-1)] active:scale-[0.96]"
               >
                 <ChevronLeft className="size-3.5" strokeWidth={2.2} />
               </button>
@@ -689,10 +688,8 @@ export const ScreenplayGuide: React.FC<ScreenplayGuideProps> = ({
                   width: `${hoverPill.w}px`,
                   transform: `translate3d(${hoverPill.x}px, 0, 0)`,
                   opacity: hoverPill.visible ? 1 : 0,
-                  background:
-                    'linear-gradient(180deg, #27272C 0%, #202025 100%)',
-                  boxShadow:
-                    'inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.04)',
+                  background: 'var(--capsule-hover-bg)',
+                  boxShadow: 'var(--capsule-hover-shadow)',
                   transition:
                     'transform 160ms cubic-bezier(0.32, 0.72, 0, 1), width 160ms cubic-bezier(0.32, 0.72, 0, 1), opacity 140ms ease-out',
                 }}
@@ -705,10 +702,8 @@ export const ScreenplayGuide: React.FC<ScreenplayGuideProps> = ({
                 style={{
                   width: `${activePill.w}px`,
                   transform: `translate3d(${activePill.x}px, 0, 0)`,
-                  background:
-                    'linear-gradient(180deg, #323238 0%, #26262B 100%)',
-                  boxShadow:
-                    'inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 0 0 1px rgba(255, 255, 255, 0.07), 0 2px 6px -1px rgba(0, 0, 0, 0.45)',
+                  background: 'var(--capsule-active-bg)',
+                  boxShadow: 'var(--capsule-active-shadow)',
                   transition:
                     'transform 220ms cubic-bezier(0.32, 0.72, 0, 1), width 220ms cubic-bezier(0.32, 0.72, 0, 1)',
                 }}
@@ -737,12 +732,12 @@ export const ScreenplayGuide: React.FC<ScreenplayGuideProps> = ({
                     onKeyDown={(e) => handleTabKeyDown(e, idx)}
                     style={{
                       color: selected
-                        ? '#D1FAE5'
+                        ? 'var(--ink-1)'
                         : hovered
-                        ? '#F4F4F6'
-                        : '#8E8E98',
+                        ? 'var(--ink-1)'
+                        : 'var(--ink-3)',
                     }}
-                    className="relative z-10 inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full pl-2 pr-3 text-xs font-medium tracking-[-0.01em] transition-[color,transform] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 active:scale-[0.96]"
+                    className="relative z-10 inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full pl-2 pr-3 text-xs font-medium tracking-[-0.01em] transition-[color,transform] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ink-1)] active:scale-[0.96]"
                   >
                     <GuideTabIcon
                       tabId={t.id}
@@ -764,9 +759,9 @@ export const ScreenplayGuide: React.FC<ScreenplayGuideProps> = ({
                 onClick={() => nudgeTabs(1)}
                 style={{
                   background:
-                    'linear-gradient(270deg, #17171B 55%, rgba(23,23,27,0))',
+                    'linear-gradient(270deg, var(--bg-surface) 55%, transparent)',
                 }}
-                className="absolute right-1 top-1 bottom-1 z-20 flex w-6 items-center justify-end rounded-r-full pr-1 text-[#A1A1AA] transition-colors hover:text-white active:scale-[0.96]"
+                className="absolute right-1 top-1 bottom-1 z-20 flex w-6 items-center justify-end rounded-r-full pr-1 text-[var(--ink-3)] transition-colors hover:text-[var(--ink-1)] active:scale-[0.96]"
               >
                 <ChevronRight className="size-3.5" strokeWidth={2.2} />
               </button>
