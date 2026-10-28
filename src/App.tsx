@@ -27,6 +27,7 @@ import {
   extractScreenplayCharacters,
   extractScreenplayLocations,
   getUnitBadgeLabel,
+  prepareScreenplayHtmlForExport,
   slugifyFilename,
 } from './editorUtils';
 import { TopBar } from './components/TopBar';
@@ -51,6 +52,7 @@ export const App: React.FC = () => {
     WorkKind | undefined
   >(undefined);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [screenplayGuideOpen, setScreenplayGuideOpen] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
 
@@ -547,7 +549,8 @@ export const App: React.FC = () => {
       }
 
       const isMod = e.metaKey || e.ctrlKey;
-      if (!isMod) return;
+      // ⌘⌥ combinations belong to the editor (screenplay element shortcuts)
+      if (!isMod || e.altKey) return;
 
       const key = e.key.toLowerCase();
       if (key === 'm') {
@@ -576,6 +579,14 @@ export const App: React.FC = () => {
         e.preventDefault();
         setSidebarOpen((v) => !v);
         setIsTyping(false);
+      } else if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+        // ⌘⇧/ (⌘?) opens the screenplay elements guide
+        if (activeDoc.kind === 'screenplay') {
+          e.preventDefault();
+          setViewMode('write');
+          setScreenplayGuideOpen((v) => !v);
+          setIsTyping(false);
+        }
       } else if (e.key === '/') {
         e.preventDefault();
         setShortcutsOpen((v) => !v);
@@ -629,9 +640,13 @@ export const App: React.FC = () => {
         : activeDoc.units
             .map((u) => {
               const badge = getUnitBadgeLabel(u, activeDoc.units || []);
+              const body =
+                activeDoc.kind === 'screenplay'
+                  ? prepareScreenplayHtmlForExport(u.contentHtml)
+                  : u.contentHtml;
               return `<section><h2>${badge}${
                 u.title ? ` — ${u.title}` : ''
-              }</h2>${u.contentHtml}</section>`;
+              }</h2>${body}</section>`;
             })
             .join('<hr />');
 
@@ -659,6 +674,15 @@ export const App: React.FC = () => {
     p[data-sp-type="parenthetical"] { font-style: italic; margin-left: 24%; margin-top: 0; margin-bottom: 0; }
     p[data-sp-type="dialogue"] { margin-left: 15%; margin-right: 15%; margin-top: 0.15rem; }
     p[data-sp-type="transition"] { text-align: right; font-weight: bold; text-transform: uppercase; }
+    p[data-sp-type="shot"] { font-weight: bold; text-transform: uppercase; margin-top: 1.5rem; }
+    p[data-sp-type="centered"] { text-align: center; text-transform: uppercase; }
+    p[data-sp-type="act-break"] { text-align: center; text-transform: uppercase; text-decoration: underline; font-weight: bold; margin-top: 2.5rem; }
+    p[data-sp-type="lyrics"] { font-style: italic; margin-left: 15%; margin-right: 15%; margin-top: 0.15rem; }
+    hr[data-sp-type="page-break"] { break-after: page; border: none; border-top: 1px dashed #ccc; }
+    .dual-dialogue { display: grid; grid-template-columns: 1fr 1fr; column-gap: 4%; }
+    .dual-dialogue p[data-sp-type="character"] { margin-left: 18%; }
+    .dual-dialogue p[data-sp-type="parenthetical"] { margin-left: 10%; }
+    .dual-dialogue p[data-sp-type="dialogue"], .dual-dialogue p[data-sp-type="lyrics"] { margin-left: 0; margin-right: 2%; }
   </style>
 </head>
 <body>
@@ -725,6 +749,11 @@ export const App: React.FC = () => {
         onCopyMarkdown={handleCopyMarkdown}
         onCopyPlainText={handleCopyPlainText}
         onOpenShortcuts={() => setShortcutsOpen(true)}
+        screenplayGuideOpen={screenplayGuideOpen}
+        onToggleScreenplayGuide={() => {
+          setViewMode('write');
+          setScreenplayGuideOpen((v) => !v);
+        }}
       />
 
       <SidebarDrawer
@@ -811,6 +840,9 @@ export const App: React.FC = () => {
             isMultiUnitWork ? () => setViewMode('birdseye') : undefined
           }
           onUserTyping={handleUserTyping}
+          screenplayGuideOpen={screenplayGuideOpen}
+          onCloseScreenplayGuide={() => setScreenplayGuideOpen(false)}
+          onToggleScreenplayGuide={() => setScreenplayGuideOpen((v) => !v)}
         />
       )}
 

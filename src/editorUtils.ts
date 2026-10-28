@@ -152,6 +152,47 @@ export function extractPlainText(html: string): string {
   return lines.join('\n\n').trim();
 }
 
+/**
+ * Screenplay HTML ready for export: writer-only lines (sections, synopses,
+ * notes) are dropped and each dual-dialogue pair is wrapped in two columns.
+ */
+export function prepareScreenplayHtmlForExport(html: string): string {
+  const temp = document.createElement('div');
+  temp.innerHTML = html;
+  temp
+    .querySelectorAll(
+      '[data-sp-type="section"], [data-sp-type="synopsis"], [data-sp-type="note"]'
+    )
+    .forEach((el) => el.remove());
+
+  let child = temp.firstElementChild;
+  while (child) {
+    if (child.getAttribute('data-dual') === '1') {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'dual-dialogue';
+      const left = document.createElement('div');
+      const right = document.createElement('div');
+      wrapper.append(left, right);
+      child.before(wrapper);
+      let el: Element | null = wrapper.nextElementSibling;
+      while (el && el.getAttribute('data-dual') === '1') {
+        const next: Element | null = el.nextElementSibling;
+        left.appendChild(el);
+        el = next;
+      }
+      while (el && el.getAttribute('data-dual') === '2') {
+        const next: Element | null = el.nextElementSibling;
+        right.appendChild(el);
+        el = next;
+      }
+      child = wrapper.nextElementSibling;
+    } else {
+      child = child.nextElementSibling;
+    }
+  }
+  return temp.innerHTML;
+}
+
 export function htmlToMarkdown(title: string, html: string): string {
   const temp = document.createElement('div');
   temp.innerHTML = html;
@@ -211,7 +252,37 @@ export function htmlToMarkdown(title: string, html: string): string {
       return;
     }
     if (spType === 'character') {
-      blocks.push(`**${content.toUpperCase()}**`);
+      const dualMark = el.getAttribute('data-dual') === '2' ? ' ^' : '';
+      blocks.push(`**${content.toUpperCase()}**${dualMark}`);
+      return;
+    }
+    // Remaining screenplay elements follow Fountain notation
+    if (spType === 'shot') {
+      blocks.push(content.toUpperCase());
+      return;
+    }
+    if (spType === 'centered' || spType === 'act-break') {
+      blocks.push(`> ${content.toUpperCase()} <`);
+      return;
+    }
+    if (spType === 'lyrics') {
+      blocks.push(`~${content}`);
+      return;
+    }
+    if (spType === 'section') {
+      blocks.push(`# ${content}`);
+      return;
+    }
+    if (spType === 'synopsis') {
+      blocks.push(`= ${content}`);
+      return;
+    }
+    if (spType === 'note') {
+      blocks.push(`[[${content}]]`);
+      return;
+    }
+    if (spType === 'page-break') {
+      blocks.push('===');
       return;
     }
     if (spType === 'parenthetical') {

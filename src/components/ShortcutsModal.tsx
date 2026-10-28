@@ -61,11 +61,15 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ open, onClose })
     {
       title: 'Screenplay Scene & Dialogue Flow',
       items: [
+        { label: 'Screenplay Elements Guide (every element & value)', keys: '⌘ ?' },
+        { label: 'Switch Element (Scene, Action, Character…)', keys: '⌘ ⌥ 1–9' },
         { label: 'Scene Heading Autocomplete', keys: 'INT. / EXT.' },
-        { label: 'Switch Action ↔ Character Cue', keys: 'Tab' },
+        { label: 'Action → Character Cue / Dialogue → Parenthetical', keys: 'Tab' },
         { label: 'Character Cue → Dialogue Line', keys: 'Enter' },
-        { label: 'Parenthetical Direction', keys: '( or @' },
-        { label: 'Scene Transition Autocomplete', keys: 'CUT TO: / >' },
+        { label: 'Character Cue (forced)', keys: '@ + Space' },
+        { label: 'Parenthetical Direction', keys: '(' },
+        { label: 'Scene Transition', keys: '> + Space' },
+        { label: 'Dual Dialogue', keys: '⌘ ⌥ D' },
       ],
     },
     {

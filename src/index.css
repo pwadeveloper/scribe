@@ -401,6 +401,132 @@ select {
   margin-block-end: 0.8em;
 }
 
+/* Shot: a camera direction inside a scene, set like a heading */
+.vellum-editor[data-work-kind="screenplay"] p[data-sp-type="shot"] {
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink-1);
+  margin-block-start: 1.5em;
+}
+
+/* General: plain text, no screenplay formatting */
+.vellum-editor[data-work-kind="screenplay"] p[data-sp-type="general"] {
+  color: var(--ink-1);
+}
+
+/* Centered text: title cards, THE END */
+.vellum-editor[data-work-kind="screenplay"] p[data-sp-type="centered"] {
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-1);
+  margin-block: 1.35em;
+}
+
+/* Lyrics: sung lines in the dialogue column, italic */
+.vellum-editor[data-work-kind="screenplay"] p[data-sp-type="lyrics"] {
+  font-style: italic;
+  color: var(--ink-1);
+  margin-block-start: 0.12em;
+  padding-inline-start: 15%;
+  padding-inline-end: 15%;
+}
+
+/* Act / episode break: centered, underlined, caps */
+.vellum-editor[data-work-kind="screenplay"] p[data-sp-type="act-break"] {
+  text-align: center;
+  text-transform: uppercase;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ink-1);
+  margin-block: 2em 1.25em;
+}
+
+/* Writer-only elements: visible while drafting, never printed */
+.vellum-editor[data-work-kind="screenplay"] p[data-sp-type="section"] {
+  font-family: "Plus Jakarta Sans", Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.82em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-2);
+  margin-block-start: 2em;
+  padding-block-end: 0.3em;
+  border-bottom: 1px dashed var(--border-strong);
+}
+.vellum-editor[data-work-kind="screenplay"] p[data-sp-type="section"]::before {
+  content: 'Section · ';
+  color: var(--ink-3);
+  font-weight: 500;
+}
+
+.vellum-editor[data-work-kind="screenplay"] p[data-sp-type="synopsis"] {
+  font-family: "Plus Jakarta Sans", Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.82em;
+  font-style: italic;
+  color: var(--ink-3);
+}
+.vellum-editor[data-work-kind="screenplay"] p[data-sp-type="synopsis"]::before {
+  content: 'Synopsis · ';
+  font-style: normal;
+}
+
+.vellum-editor[data-work-kind="screenplay"] p[data-sp-type="note"] {
+  font-family: "Plus Jakarta Sans", Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.82em;
+  color: var(--on-pastel);
+  background-color: var(--butter);
+  border-radius: 10px;
+  padding: 0.45em 0.75em;
+}
+.vellum-editor[data-work-kind="screenplay"] p[data-sp-type="note"]::before {
+  content: 'Note · ';
+  font-weight: 600;
+}
+
+/* Page break: a labelled dashed rule */
+.vellum-editor[data-work-kind="screenplay"] hr[data-sp-type="page-break"] {
+  width: 100%;
+  height: 0;
+  margin-block: 2em;
+  background: none;
+  border: none;
+  border-top: 1px dashed var(--border-strong);
+  overflow: visible;
+  text-align: center;
+}
+.vellum-editor[data-work-kind="screenplay"] hr[data-sp-type="page-break"]::after {
+  content: 'Page break';
+  position: relative;
+  top: -0.7em;
+  padding-inline: 0.6em;
+  font-family: "Plus Jakarta Sans", Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.7em;
+  color: var(--ink-3);
+  background-color: var(--bg-canvas);
+}
+
+/* Dual dialogue: each speech keeps to its own half of the page. RichEditor
+   lifts the second speech beside the first (measured offsets, own stylesheet). */
+.vellum-editor[data-work-kind="screenplay"] > [data-dual="1"] {
+  margin-inline-end: 52%;
+}
+.vellum-editor[data-work-kind="screenplay"] > [data-dual="2"] {
+  margin-inline-start: 52%;
+}
+.vellum-editor[data-work-kind="screenplay"] p[data-dual][data-sp-type="character"] {
+  padding-inline: 18% 4%;
+}
+.vellum-editor[data-work-kind="screenplay"] p[data-dual][data-sp-type="parenthetical"] {
+  padding-inline: 10% 8%;
+}
+.vellum-editor[data-work-kind="screenplay"] p[data-dual][data-sp-type="dialogue"],
+.vellum-editor[data-work-kind="screenplay"] p[data-dual][data-sp-type="lyrics"] {
+  padding-inline: 0 2%;
+}
+
 @media (max-width: 640px) {
   .vellum-editor[data-work-kind="screenplay"] p[data-sp-type="character"] {
     padding-inline-start: 16%;
@@ -486,5 +612,17 @@ select {
   }
   .vellum-editor > * {
     opacity: 1 !important;
+  }
+  .vellum-editor p[data-sp-type="section"],
+  .vellum-editor p[data-sp-type="synopsis"],
+  .vellum-editor p[data-sp-type="note"] {
+    display: none !important;
+  }
+  .vellum-editor hr[data-sp-type="page-break"] {
+    break-after: page;
+    border: none;
+  }
+  .vellum-editor hr[data-sp-type="page-break"]::after {
+    content: none;
   }
 }

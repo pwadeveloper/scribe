@@ -7,16 +7,18 @@ import {
   MessageSquare,
   CornerDownRight,
   ArrowRightLeft,
+  MoreHorizontal,
 } from 'lucide-react';
 import { gsapButtonHover, prefersReducedMotion } from '../motion';
+import {
+  ScreenplayBlockType,
+  SCREENPLAY_BLOCKS,
+  blockSpec,
+  modKeys,
+  vocabValues,
+} from '../screenplay';
 
-export type ScreenplayBlockType =
-  | 'slugline'
-  | 'action'
-  | 'character'
-  | 'parenthetical'
-  | 'dialogue'
-  | 'transition';
+export type { ScreenplayBlockType };
 
 export interface AutocompleteSuggestion {
   id: string;
@@ -26,40 +28,26 @@ export interface AutocompleteSuggestion {
   targetBlockType?: ScreenplayBlockType;
 }
 
-const SLUGLINE_PREFIXES = [
-  { label: 'INT. ', desc: 'Interior scene' },
-  { label: 'EXT. ', desc: 'Exterior scene' },
-  { label: 'INT./EXT. ', desc: 'Interior & Exterior' },
-  { label: 'I/E. ', desc: 'Short Interior/Exterior' },
-];
-
-const TIMES_OF_DAY = [
-  { label: 'DAY', desc: 'Daytime scene' },
-  { label: 'NIGHT', desc: 'Nighttime scene' },
-  { label: 'CONTINUOUS', desc: 'Action continues uninterrupted' },
-  { label: 'LATER', desc: 'Later in the same location' },
-  { label: 'MOMENTS LATER', desc: 'Shortly after' },
-  { label: 'DAWN', desc: 'Early morning light' },
-  { label: 'DUSK', desc: 'Sunset / twilight' },
-  { label: 'SAME TIME', desc: 'Simultaneous action' },
-];
-
-const CHARACTER_EXTENSIONS = [
-  { label: '(V.O.)', desc: 'Voice Over' },
-  { label: '(O.S.)', desc: 'Off Screen' },
-  { label: "(CONT'D)", desc: 'Continued dialogue' },
-  { label: '(INTO PHONE)', desc: 'Speaking into phone' },
-  { label: '(SUBTITLED)', desc: 'Subtitled speech' },
-];
-
+const SLUGLINE_PREFIXES = vocabValues('headings', 'heading-prefix').map((v) => ({
+  label: `${v.value} `,
+  desc: v.meaning,
+}));
+const TIMES_OF_DAY = vocabValues('headings', 'heading-time').map((v) => ({
+  label: v.value,
+  desc: v.meaning,
+}));
+const CHARACTER_EXTENSIONS = vocabValues('characters').map((v) => ({
+  label: v.value,
+  desc: v.meaning,
+}));
 const TRANSITIONS = [
-  { label: 'CUT TO:', desc: 'Standard cut' },
-  { label: 'DISSOLVE TO:', desc: 'Gradual dissolve' },
-  { label: 'SMASH CUT TO:', desc: 'Abrupt contrast cut' },
-  { label: 'MATCH CUT TO:', desc: 'Visual/audio match cut' },
-  { label: 'FADE IN:', desc: 'Opening fade in' },
-  { label: 'FADE OUT.', desc: 'Scene or act end' },
+  ...vocabValues('transitions').map((v) => ({ label: v.value, desc: v.meaning })),
 ];
+const SHOTS = vocabValues('camera').map((v) => ({ label: v.value, desc: v.meaning }));
+const PARENTHETICALS = vocabValues('parentheticals').map((v) => ({
+  label: v.value,
+  desc: v.meaning,
+}));
 
 export function computeScreenplaySuggestions(params: {
   blockType: ScreenplayBlockType;
@@ -74,11 +62,11 @@ export function computeScreenplaySuggestions(params: {
   // 1. If in a slugline OR typing INT / EXT at the start of any line
   if (
     blockType === 'slugline' ||
-    /^(I|IN|INT|E|EX|EXT|I\/E)\b/i.test(trimmed)
+    /^(I|IN|INT|E|EX|EXT|ES|EST|I\/E)\b/i.test(trimmed)
   ) {
     // Check if user already has INT. / EXT. and is typing time of day after " - "
     const dashIndex = upper.lastIndexOf(' -');
-    if (dashIndex !== -1 && /^(INT\.|EXT\.|INT\.\/EXT\.|I\/E\.)/.test(upper)) {
+    if (dashIndex !== -1 && /^(INT\.|EXT\.|INT\.\/EXT\.|EXT\.\/INT\.|I\/E\.|EST\.)/.test(upper)) {
       const beforeDash = upper.slice(0, dashIndex).trim();
       const afterDash = upper.slice(dashIndex + 2).trim();
       return TIMES_OF_DAY.filter(
@@ -93,7 +81,7 @@ export function computeScreenplaySuggestions(params: {
     }
 
     // Check if user has typed "INT. " or "EXT. " and is typing a location
-    const prefixMatch = upper.match(/^(INT\.\/EXT\.|INT\.|EXT\.|I\/E\.)\s*(.*)$/);
+    const prefixMatch = upper.match(/^(INT\.\/EXT\.|EXT\.\/INT\.|INT\.|EXT\.|I\/E\.|EST\.)\s*(.*)$/);
     if (prefixMatch) {
       const prefix = prefixMatch[1];
       const locQuery = prefixMatch[2].trim();
@@ -104,8 +92,11 @@ export function computeScreenplaySuggestions(params: {
           knownLocations
             .map((s) =>
               s
-                .replace(/^(INT\.\/EXT\.|INT\.|EXT\.|I\/E\.)\s*/i, '')
-                .replace(/\s*-\s*(DAY|NIGHT|CONTINUOUS|DAWN|DUSK|LATER|MOMENTS LATER|SAME TIME|MORNING|EVENING)$/i, '')
+                .replace(/^(INT\.\/EXT\.|EXT\.\/INT\.|INT\.|EXT\.|I\/E\.|EST\.)\s*/i, '')
+                .replace(
+                  new RegExp(`\\s*-\\s*(${TIMES_OF_DAY.map((t) => t.label).join('|')})$`, 'i'),
+                  ''
+                )
                 .trim()
             )
             .filter(Boolean)
@@ -192,7 +183,9 @@ export function computeScreenplaySuggestions(params: {
       const extQuery = cleanQuery.slice(parenIdx);
       return CHARACTER_EXTENSIONS.filter((ext) =>
         ext.label.startsWith(extQuery)
-      ).map((ext) => ({
+      )
+        .slice(0, 6)
+        .map((ext) => ({
         id: `ext-${ext.label}`,
         label: `${charName} ${ext.label}`,
         insertText: `${charName} ${ext.label}`,
@@ -236,20 +229,54 @@ export function computeScreenplaySuggestions(params: {
     return results.slice(0, 6);
   }
 
-  // 3. Transition autocomplete (when in transition block or typing CUT / DISSOLVE / FADE / SMASH)
+  // 3. Parenthetical delivery notes
+  if (blockType === 'parenthetical') {
+    const q = trimmed.replace(/^\(/, '').replace(/\)$/, '').toLowerCase();
+    return PARENTHETICALS.filter(
+      (p) => p.label.slice(1).startsWith(q) && p.label.toLowerCase() !== trimmed.toLowerCase()
+    )
+      .slice(0, 6)
+      .map((p) => ({
+        id: `paren-${p.label}`,
+        label: p.label,
+        insertText: p.label,
+        category: p.desc,
+        targetBlockType: 'parenthetical',
+      }));
+  }
+
+  // 4. Shot headings
+  if (blockType === 'shot') {
+    return SHOTS.filter(
+      (t) => !upper || (t.label.startsWith(upper) && t.label !== upper)
+    )
+      .slice(0, 6)
+      .map((t) => ({
+        id: `shot-${t.label}`,
+        label: t.label,
+        insertText: t.label,
+        category: t.desc,
+        targetBlockType: 'shot',
+      }));
+  }
+
+  // 5. Transition autocomplete (in a transition, or typing CUT / DISSOLVE / FADE / SMASH …)
   if (
     blockType === 'transition' ||
-    /^(CUT|DISS|FADE|SMASH|MATCH)\b/i.test(trimmed)
+    /^(CUT|DISS|FADE|SMASH|MATCH|JUMP|FLASH|WIPE|IRIS|TIME CUT|INTERCUT)\b/i.test(trimmed)
   ) {
     return TRANSITIONS.filter(
       (t) => !upper || (t.label.startsWith(upper) && t.label !== upper)
-    ).map((t) => ({
-      id: `trans-${t.label}`,
-      label: t.label,
-      insertText: t.label,
-      category: t.desc,
-      targetBlockType: 'transition',
-    }));
+    )
+      .slice(0, 6)
+      .map((t) => ({
+        id: `trans-${t.label}`,
+        label: t.label,
+        insertText: t.label,
+        category: t.desc,
+        // FADE IN: opens the script as an action line, not a transition
+        targetBlockType: t.label === 'FADE IN:' ? 'action' : 'transition',
+      }));
   }
 
   return [];
@@ -327,28 +354,30 @@ export const ScreenplayAutocompletePopover: React.FC<
 interface ScreenplayElementBarProps {
   activeBlockType: ScreenplayBlockType;
   onSelectBlockType: (type: ScreenplayBlockType) => void;
+  onOpenGuide?: () => void;
 }
+
+const CORE_ELEMENTS: {
+  id: ScreenplayBlockType;
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number | string }>;
+}[] = [
+  { id: 'slugline', icon: Clapperboard },
+  { id: 'action', icon: AlignLeft },
+  { id: 'character', icon: User },
+  { id: 'dialogue', icon: MessageSquare },
+  { id: 'parenthetical', icon: CornerDownRight },
+  { id: 'transition', icon: ArrowRightLeft },
+];
 
 export const ScreenplayElementBar: React.FC<ScreenplayElementBarProps> = ({
   activeBlockType,
   onSelectBlockType,
+  onOpenGuide,
 }) => {
   const btnHover = gsapButtonHover({ hoverScale: 1.04, hoverY: -0.5, pressScale: 0.96 });
-
-  const elements: {
-    id: ScreenplayBlockType;
-    label: string;
-    mobileLabel: string;
-    shortcut: string;
-    icon: React.ComponentType<{ className?: string; strokeWidth?: number | string }>;
-  }[] = [
-    { id: 'slugline', label: 'Slugline', mobileLabel: 'Slug', shortcut: 'INT/EXT', icon: Clapperboard },
-    { id: 'action', label: 'Action', mobileLabel: 'Action', shortcut: '⌘1', icon: AlignLeft },
-    { id: 'character', label: 'Character', mobileLabel: 'Char', shortcut: 'Tab', icon: User },
-    { id: 'dialogue', label: 'Dialogue', mobileLabel: 'Dialog', shortcut: 'Enter', icon: MessageSquare },
-    { id: 'parenthetical', label: '(Paren)', mobileLabel: '(Paren)', shortcut: '(', icon: CornerDownRight },
-    { id: 'transition', label: 'Transition', mobileLabel: 'Cut', shortcut: 'CUT TO:', icon: ArrowRightLeft },
-  ];
+  const { mod, alt } = modKeys();
+  const isCore = CORE_ELEMENTS.some((c) => c.id === activeBlockType);
+  const activeSpec = blockSpec(activeBlockType);
 
   return (
     <div
@@ -364,7 +393,8 @@ export const ScreenplayElementBar: React.FC<ScreenplayElementBarProps> = ({
       }}
       className="vellum-scroller no-print fixed bottom-14 left-1/2 flex max-w-[calc(100vw-20px)] -translate-x-1/2 items-center gap-0.5 overflow-x-auto rounded-full p-1 text-xs sm:bottom-5"
     >
-      {elements.map((item) => {
+      {CORE_ELEMENTS.map((item) => {
+        const spec = SCREENPLAY_BLOCKS.find((b) => b.id === item.id)!;
         const Icon = item.icon;
         const active = activeBlockType === item.id;
         return (
@@ -374,20 +404,47 @@ export const ScreenplayElementBar: React.FC<ScreenplayElementBarProps> = ({
             onClick={() => onSelectBlockType(item.id)}
             {...btnHover}
             aria-pressed={active}
-            title={`${item.label} (${item.shortcut})`}
+            title={`${spec.label} (${mod}${alt}${spec.digit})`}
             style={{
-              backgroundColor: active ? 'var(--accent-soft)' : 'transparent',
-              color: active ? 'var(--accent)' : 'var(--ink-2)',
+              backgroundColor: active ? 'var(--ink-1)' : 'transparent',
+              color: active ? 'var(--bg-canvas)' : 'var(--ink-2)',
             }}
-            className="flex h-8 shrink-0 items-center gap-1 rounded-full px-2.5 text-[11px] font-medium transition-colors duration-150 hover:bg-[var(--bg-subtle-hover)] hover:text-[var(--ink-1)] sm:h-7 sm:gap-1.5"
+            className="flex h-8 shrink-0 items-center gap-1 rounded-full px-2.5 text-[11px] font-medium transition-[color,background-color] duration-150 hover:bg-[var(--bg-subtle-hover)] sm:h-7 sm:gap-1.5"
           >
             <Icon className="size-3" strokeWidth={1.9} />
-            <span className="sm:hidden">{item.mobileLabel}</span>
-            <span className="hidden sm:inline">{item.label}</span>
+            <span>{spec.short}</span>
           </button>
         );
       })}
+
+      {!isCore && (
+        <span
+          aria-live="polite"
+          style={{ backgroundColor: 'var(--ink-1)', color: 'var(--bg-canvas)' }}
+          className="flex h-8 shrink-0 items-center rounded-full px-2.5 text-[11px] font-medium sm:h-7"
+        >
+          {activeSpec.label}
+        </span>
+      )}
+
+      {onOpenGuide && (
+        <>
+          <span
+            aria-hidden="true"
+            className="mx-0.5 h-4 w-px shrink-0 bg-[var(--border-strong)]"
+          />
+          <button
+            type="button"
+            onClick={onOpenGuide}
+            {...btnHover}
+            title={`All elements & shortcuts (${mod}?)`}
+            className="flex h-8 shrink-0 items-center gap-1 rounded-full px-2.5 text-[11px] font-medium text-[var(--ink-2)] transition-[color,background-color] duration-150 hover:bg-[var(--bg-subtle-hover)] sm:h-7"
+          >
+            <MoreHorizontal className="size-3.5" strokeWidth={1.9} />
+            <span>More</span>
+          </button>
+        </>
+      )}
     </div>
   );
 };
-

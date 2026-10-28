@@ -371,28 +371,32 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
         className="group relative flex flex-col justify-between rounded-2xl p-4 transition-shadow duration-150"
       >
         <div>
-          {/* Top Row: Status Pill + Badge + Reorder */}
-          <div className="mb-2.5 flex items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-1.5">
+          {/* Status + section pills: fixed height, never wrap mid-label */}
+          <div className="mb-3 flex flex-wrap items-center gap-1.5">
+            <span
+              style={{ backgroundColor: statusFill, color: 'var(--on-pastel)' }}
+              className="inline-flex h-5 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full pl-2 pr-2.5 text-[10px] font-medium leading-none"
+            >
               <span
-                style={{ backgroundColor: statusFill, color: 'var(--on-pastel)' }}
-                className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium"
-              >
-                <span
-                  style={{ backgroundColor: statusColor }}
-                  className="size-1.5 rounded-full"
-                />
-                {statusLabel}
-              </span>
-              <span
-                style={toneChip(sectionTone)}
-                className="rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.05em]"
-              >
-                {badge}
-              </span>
-            </div>
+                aria-hidden="true"
+                style={{ backgroundColor: statusColor }}
+                className="size-1.5 shrink-0 rounded-full"
+              />
+              {statusLabel}
+            </span>
+            <span
+              style={toneChip(sectionTone)}
+              className="inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded-full px-2 font-mono text-[10px] font-semibold uppercase leading-none tracking-[0.05em]"
+            >
+              {badge}
+            </span>
+          </div>
 
-            <div className="flex items-center gap-1 opacity-100 transition-opacity duration-150 focus-within:opacity-100 [@media(hover:hover)_and_(pointer:fine)]:opacity-0 [@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100">
+          {/* Card actions: floating toolbar on hover devices, inline row on touch */}
+          <div
+            style={{ backgroundColor: 'var(--bg-elevated)' }}
+            className="mb-3 flex items-center justify-end gap-1.5 [@media(hover:hover)_and_(pointer:fine)]:pointer-events-none [@media(hover:hover)_and_(pointer:fine)]:absolute [@media(hover:hover)_and_(pointer:fine)]:right-3 [@media(hover:hover)_and_(pointer:fine)]:top-0 [@media(hover:hover)_and_(pointer:fine)]:-translate-y-1/2 [@media(hover:hover)_and_(pointer:fine)]:z-10 [@media(hover:hover)_and_(pointer:fine)]:mb-0 [@media(hover:hover)_and_(pointer:fine)]:rounded-full [@media(hover:hover)_and_(pointer:fine)]:p-0.5 [@media(hover:hover)_and_(pointer:fine)]:opacity-0 [@media(hover:hover)_and_(pointer:fine)]:shadow-[var(--elevation-floating)] [@media(hover:hover)_and_(pointer:fine)]:transition-opacity [@media(hover:hover)_and_(pointer:fine)]:duration-150 [@media(hover:hover)_and_(pointer:fine)]:focus-within:pointer-events-auto [@media(hover:hover)_and_(pointer:fine)]:focus-within:opacity-100 [@media(hover:hover)_and_(pointer:fine)]:group-hover:pointer-events-auto [@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100"
+          >
               {hasParts && (
                 <select
                   aria-label="Assign chapter to Part"
@@ -404,7 +408,7 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
                   }
                   onClick={(e) => e.stopPropagation()}
                   style={{ backgroundColor: 'var(--bg-surface)' }}
-                  className="mr-1 h-7 rounded-md px-1.5 text-xs text-[var(--ink-2)] focus:outline-none sm:h-6 sm:text-[11px]"
+                  className="mr-0.5 h-8 max-w-[112px] truncate rounded-full px-2.5 text-base text-[var(--ink-2)] sm:text-[11px]"
                 >
                   <option value="">Unassigned</option>
                   {parts.map((p) => (
@@ -424,7 +428,7 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
                 }}
                 aria-label="Move earlier"
                 title="Move earlier"
-                className="flex size-7 items-center justify-center rounded-md text-[var(--ink-3)] hover:bg-[var(--bg-subtle-hover)] hover:text-[var(--ink-1)] disabled:opacity-30 sm:size-6"
+                className="relative flex size-8 items-center justify-center rounded-full text-[var(--ink-3)] transition-[color,background-color,transform] duration-150 ease-out before:absolute before:-inset-[3px] hover:bg-[var(--bg-subtle-hover)] hover:text-[var(--ink-1)] active:scale-[0.96] disabled:pointer-events-none disabled:opacity-30"
               >
                 <ArrowLeft className="size-3.5" />
               </button>
@@ -437,7 +441,7 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
                 }}
                 aria-label="Move later"
                 title="Move later"
-                className="flex size-7 items-center justify-center rounded-md text-[var(--ink-3)] hover:bg-[var(--bg-subtle-hover)] hover:text-[var(--ink-1)] disabled:opacity-30 sm:size-6"
+                className="relative flex size-8 items-center justify-center rounded-full text-[var(--ink-3)] transition-[color,background-color,transform] duration-150 ease-out before:absolute before:-inset-[3px] hover:bg-[var(--bg-subtle-hover)] hover:text-[var(--ink-1)] active:scale-[0.96] disabled:pointer-events-none disabled:opacity-30"
               >
                 <ArrowRight className="size-3.5" />
               </button>
@@ -450,12 +454,11 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
                   }}
                   aria-label="Delete section"
                   title="Delete section"
-                  className="flex size-7 items-center justify-center rounded-md text-[var(--ink-3)] hover:bg-[var(--bg-subtle-hover)] hover:text-red-600 sm:size-6"
+                  className="relative flex size-8 items-center justify-center rounded-full text-[var(--ink-3)] transition-[color,background-color,transform] duration-150 ease-out before:absolute before:-inset-[3px] hover:bg-[var(--bg-subtle-hover)] hover:text-red-600 active:scale-[0.96]"
                 >
                   <Trash2 className="size-3.5" />
                 </button>
               )}
-            </div>
           </div>
 
           {doc.kind === 'screenplay' && (
@@ -467,9 +470,9 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
           <button
             type="button"
             onClick={() => onSelectUnitAndWrite(unit.id)}
-            className="block w-full text-start"
+            className="-mx-1.5 block w-[calc(100%+0.75rem)] rounded-xl px-1.5 py-1 text-start focus-visible:outline-offset-0"
           >
-            <h3 className="font-serif text-lg font-semibold leading-snug text-[var(--ink-1)] group-hover:text-[var(--accent)]">
+            <h3 className="font-serif text-lg font-semibold leading-snug text-[var(--ink-1)] transition-colors duration-150 [text-wrap:balance] group-hover:text-[var(--accent)]">
               {unit.title.trim() ||
                 (doc.kind === 'screenplay'
                   ? parsedSlug?.location || 'Untitled Scene'
@@ -508,8 +511,9 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
           )}
 
           <div className="mt-3">
-            <input
-              type="text"
+            <textarea
+              rows={2}
+              aria-label={doc.kind === 'screenplay' ? 'Scene note' : 'Chapter synopsis'}
               value={unit.synopsis || ''}
               onChange={(e) =>
                 onUpdateUnitMeta(unit.id, { synopsis: e.target.value })
@@ -523,14 +527,14 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
               style={{
                 backgroundColor: 'var(--bg-surface)',
               }}
-              className="w-full rounded-lg px-2.5 py-1.5 text-base text-[var(--ink-2)] placeholder:text-[var(--ink-4)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] sm:text-[11px]"
+              className="block w-full resize-none rounded-xl px-3 py-2 text-base leading-snug text-[var(--ink-2)] transition-[background-color,box-shadow] duration-150 ease-out placeholder:text-[var(--ink-4)] focus:bg-[var(--bg-elevated)] focus:shadow-[inset_0_0_0_1px_var(--border-strong)] focus:outline-none sm:text-xs"
             />
           </div>
         </div>
 
         {/* Tile Footer with SegmentedTickMeter (Image 2) */}
         {!isConfirmingDelete ? (
-          <div className="mt-3.5 flex items-center justify-between border-t border-[var(--border-subtle)] pt-3">
+          <div className="mt-4 flex items-center justify-between border-t border-[var(--border-subtle)] pt-2.5">
             <SegmentedTickMeter
               current={unitMetrics.words}
               target={targetWordsPerUnit}
@@ -539,7 +543,7 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
             <button
               type="button"
               onClick={() => onSelectUnitAndWrite(unit.id)}
-              className="flex items-center gap-1 text-xs font-medium text-[var(--ink-2)] transition-colors group-hover:text-[var(--accent)]"
+              className="-mr-2 flex h-8 items-center gap-1 rounded-full pl-3 pr-2.5 text-xs font-medium text-[var(--ink-2)] transition-[color,background-color,transform] duration-150 ease-out hover:bg-[var(--bg-subtle-hover)] active:scale-[0.96] group-hover:text-[var(--accent)]"
             >
               <span>Write</span>
               <ArrowUpRight className="size-3.5" />

@@ -21,6 +21,7 @@ import {
   Plus,
   Archive,
   GitCommitHorizontal,
+  CircleHelp,
 } from 'lucide-react';
 import {
   FocusMode,
@@ -55,6 +56,8 @@ interface TopBarProps {
   onCopyMarkdown: () => void;
   onCopyPlainText: () => void;
   onOpenShortcuts: () => void;
+  screenplayGuideOpen?: boolean;
+  onToggleScreenplayGuide?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -77,6 +80,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   onCopyMarkdown,
   onCopyPlainText,
   onOpenShortcuts,
+  screenplayGuideOpen = false,
+  onToggleScreenplayGuide,
 }) => {
   const [openMenu, setOpenMenu] = useState<'appearance' | 'export' | null>(null);
   const [copiedType, setCopiedType] = useState<'md' | 'txt' | null>(null);
@@ -268,6 +273,27 @@ export const TopBar: React.FC<TopBarProps> = ({
 
       {/* Right: Cabinet Archive Toggle, Timeline/Bird's-Eye Toggle, Writing Modes, Typography, Export */}
       <div ref={menuContainerRef} className="relative flex items-center gap-1 sm:gap-1.5">
+        {workKind === 'screenplay' && onToggleScreenplayGuide && (
+          <button
+            type="button"
+            onClick={onToggleScreenplayGuide}
+            {...btnHover}
+            aria-pressed={screenplayGuideOpen}
+            aria-label="Screenplay elements guide (⌘?)"
+            title="Screenplay elements & shortcuts (⌘?)"
+            style={{
+              backgroundColor: screenplayGuideOpen
+                ? 'var(--ink-1)'
+                : 'var(--lavender)',
+              color: screenplayGuideOpen
+                ? 'var(--bg-canvas)'
+                : 'var(--on-pastel)',
+            }}
+            className="relative flex size-8 items-center justify-center rounded-full transition-colors duration-150 ease-out before:absolute before:-inset-1"
+          >
+            <CircleHelp className="size-4" strokeWidth={1.9} />
+          </button>
+        )}
         <button
           type="button"
           onClick={onToggleCabinetView}
