@@ -78,11 +78,11 @@ export const App: React.FC = () => {
     const metaTheme = document.getElementById('vellum-theme-color');
     if (metaTheme) {
       const themeColors: Record<string, string> = {
-        paper: '#FAF7F2',
+        paper: '#F6F2EA',
         sepia: '#F3ECE0',
         night: '#141312',
       };
-      metaTheme.setAttribute('content', themeColors[settings.theme] || '#FAF7F2');
+      metaTheme.setAttribute('content', themeColors[settings.theme] || '#F6F2EA');
     }
     const timer = window.setTimeout(() => {
       root.classList.remove('theme-switching');
@@ -648,12 +648,12 @@ export const App: React.FC = () => {
       margin: 4rem auto;
       padding: 0 1.5rem;
       line-height: 1.65;
-      color: #1C1917;
-      background: #FAF7F2;
+      color: #111111;
+      background: #F6F2EA;
     }
     h1 { font-size: 2.2rem; line-height: 1.15; margin-bottom: 1.5rem; }
     h2 { font-size: 1.5rem; margin-top: 2.5rem; }
-    blockquote { border-left: 2px solid #9A4B26; padding-left: 1rem; font-style: italic; color: #524B44; margin-left: 0; }
+    blockquote { border-left: 2px solid #FF4B36; padding-left: 1rem; font-style: italic; color: #524B44; margin-left: 0; }
     p[data-sp-type="slugline"] { font-weight: bold; text-transform: uppercase; margin-top: 2rem; }
     p[data-sp-type="character"] { font-weight: bold; text-transform: uppercase; margin-left: 30%; margin-bottom: 0; }
     p[data-sp-type="parenthetical"] { font-style: italic; margin-left: 24%; margin-top: 0; margin-bottom: 0; }

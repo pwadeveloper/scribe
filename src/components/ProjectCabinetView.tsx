@@ -17,6 +17,22 @@ import {
   extractPlainTextSnippet,
 } from '../editorUtils';
 import { canHover, gsapButtonHover, prefersReducedMotion } from '../motion';
+import {
+  FOLDER_ART,
+  WORK_KIND_TONE,
+  toneChip,
+  toneVar,
+  toneWash,
+} from '../palette';
+
+/** Inspector card is always dark, independent of the reading theme. */
+export const INSPECTOR = {
+  bg: '#1A1A1A',
+  fg: '#F6F2EA',
+  muted: '#8B877F',
+  signal: '#FF7A63',
+  butter: '#F6DD8B',
+};
 
 interface ProjectCabinetViewProps {
   documents: DocumentItem[];
@@ -54,9 +70,9 @@ export const SegmentedTickMeter: React.FC<{
               key={idx}
               style={{
                 backgroundColor: filled
-                  ? 'var(--accent)'
+                  ? 'var(--signal)'
                   : 'var(--border-strong)',
-                opacity: filled ? 1 : 0.45,
+                opacity: filled ? 1 : 0.6,
               }}
               className="inline-block h-3 w-[2.5px] rounded-full transition-colors duration-200"
             />
@@ -183,11 +199,12 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
   const handlePocketHoverEnter = (el: HTMLElement) => {
     if (prefersReducedMotion() || !canHover()) return;
     const sheets = el.querySelectorAll('[data-paper-sheet="true"]');
-    gsap.to(el, { y: -3, duration: 0.2, ease: 'power2.out', overwrite: 'auto' });
+    const art = el.querySelector('[data-folder-art="true"]') ?? el;
+    gsap.to(art, { y: -3, duration: 0.2, ease: 'power2.out', overwrite: 'auto' });
     if (sheets.length > 0) {
       gsap.to(sheets, {
-        y: -5,
-        rotation: (i) => (i === 0 ? -4 : 4),
+        y: -9,
+        rotation: (i) => (i === 0 ? -6 : 5),
         duration: 0.24,
         ease: 'power2.out',
         overwrite: 'auto',
@@ -198,7 +215,8 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
   const handlePocketHoverLeave = (el: HTMLElement) => {
     if (prefersReducedMotion()) return;
     const sheets = el.querySelectorAll('[data-paper-sheet="true"]');
-    gsap.to(el, { y: 0, duration: 0.2, ease: 'power2.out', overwrite: 'auto' });
+    const art = el.querySelector('[data-folder-art="true"]') ?? el;
+    gsap.to(art, { y: 0, duration: 0.2, ease: 'power2.out', overwrite: 'auto' });
     if (sheets.length > 0) {
       gsap.to(sheets, {
         y: 0,
@@ -267,14 +285,23 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
   const tabPositions = ['7%', '36%', '61%', '18%', '46%'];
 
   return (
+    <>
+    <div
+      aria-hidden="true"
+      style={{ background: toneWash('blush') }}
+      className="no-print pointer-events-none absolute inset-x-0 top-0 h-[420px]"
+    />
     <div
       ref={containerRef}
-      className="mx-auto max-w-5xl px-4 pb-28 pt-20 sm:px-8 sm:pt-24"
+      className="relative mx-auto max-w-5xl px-4 pb-28 pt-20 sm:px-8 sm:pt-24"
     >
       {/* Header */}
-      <div className="mb-8 flex flex-col justify-between gap-4 border-b border-[var(--border-subtle)] pb-6 sm:flex-row sm:items-end">
+      <div className="mb-8 flex flex-col justify-between gap-4 border-b border-[var(--border-strong)] pb-6 sm:flex-row sm:items-end">
         <div>
-          <div className="mb-1.5 flex items-center gap-2 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--accent)]">
+          <div
+            style={toneChip('blush')}
+            className="mb-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[11px] font-medium uppercase tracking-[0.08em]"
+          >
             <Folder className="size-3.5" />
             <span>Manuscript Filing Cabinet &amp; Folders</span>
           </div>
@@ -331,7 +358,8 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {folderGroups.map((folder) => {
             const isSelected = selectedCategory === folder.id;
-            const Icon = folder.icon;
+            const art = FOLDER_ART[folder.kind ?? 'book'];
+            const gid = `folder-${folder.id}`;
             return (
               <div
                 key={folder.id}
@@ -344,6 +372,7 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
                 }
                 role="button"
                 tabIndex={0}
+                aria-pressed={isSelected}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
@@ -355,92 +384,104 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
                 style={{
                   backgroundColor: isSelected
                     ? 'var(--bg-elevated)'
-                    : 'var(--bg-surface)',
+                    : 'color-mix(in srgb, var(--bg-elevated) 45%, transparent)',
                   boxShadow: isSelected
-                    ? '0 0 0 2px var(--accent), var(--elevation-raised)'
-                    : 'var(--elevation-raised)',
+                    ? `0 0 0 1.5px ${art.base}, var(--elevation-raised)`
+                    : 'inset 0 0 0 1px var(--border-subtle)',
                 }}
-                className="group cursor-pointer rounded-2xl p-4 text-center transition-shadow duration-150"
+                className="group cursor-pointer rounded-3xl px-4 pb-5 pt-6 text-center transition-[background-color,box-shadow] duration-200"
               >
-                {/* Tactile Folder Pocket Illustration with Peeking Paper Sheets */}
-                <div className="relative mx-auto mb-3 mt-2 h-28 w-44 select-none">
-                  {/* Back Folder Tab */}
-                  <div
-                    style={{
-                      backgroundColor: isSelected
-                        ? 'var(--accent)'
-                        : 'var(--ink-3)',
-                      opacity: isSelected ? 0.85 : 0.45,
-                    }}
-                    className="absolute inset-x-2 top-1 h-20 rounded-xl transition-colors"
-                  />
-                  <div
-                    style={{
-                      backgroundColor: isSelected
-                        ? 'var(--accent)'
-                        : 'var(--ink-3)',
-                      opacity: isSelected ? 0.85 : 0.45,
-                    }}
-                    className="absolute left-2 top-0 h-5 w-16 rounded-t-lg transition-colors"
-                  />
+                {/* Glossy folder: SVG back panel, HTML paper sheets, SVG front pocket */}
+                <div
+                  data-folder-art="true"
+                  className="relative mx-auto mb-4 h-[136px] w-[200px] select-none"
+                  aria-hidden="true"
+                >
+                  <svg
+                    viewBox="0 0 200 136"
+                    className="absolute inset-0 size-full"
+                  >
+                    <defs>
+                      <linearGradient id={`${gid}-back`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={art.base} />
+                        <stop offset="100%" stopColor={art.deep} />
+                      </linearGradient>
+                    </defs>
+                    <path
+                      d="M12 0 H60 Q67 0 71 5 L78 13 Q81 16 87 16 H188 Q200 16 200 28 V124 Q200 136 188 136 H12 Q0 136 0 124 V12 Q0 0 12 0 Z"
+                      fill={`url(#${gid}-back)`}
+                    />
+                  </svg>
 
-                  {/* Peeking Paper Sheet 1 */}
                   <div
                     data-paper-sheet="true"
                     style={{
-                      backgroundColor: 'var(--bg-elevated)',
-                      boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
                       transform: 'rotate(-2deg)',
+                      boxShadow: '0 1px 3px rgba(17,17,17,0.10)',
                     }}
-                    className="absolute left-5 top-2.5 h-16 w-20 rounded-md p-2 text-start"
+                    className="absolute left-[18px] top-[24px] h-[84px] w-[92px] rounded-lg bg-white p-2.5 text-start"
                   >
-                    <div className="mb-1 h-1 w-8 rounded-full bg-[var(--accent)] opacity-70" />
-                    <div className="mb-1 h-1 w-12 rounded-full bg-[var(--ink-4)] opacity-40" />
-                    <div className="h-1 w-10 rounded-full bg-[var(--ink-4)] opacity-40" />
+                    <div className="mb-1.5 h-1.5 w-9 rounded-full bg-[#FF4B36]/80" />
+                    <div className="mb-1.5 h-1 w-14 rounded-full bg-[#111]/10" />
+                    <div className="h-1 w-11 rounded-full bg-[#111]/10" />
                   </div>
-
-                  {/* Peeking Paper Sheet 2 */}
                   <div
                     data-paper-sheet="true"
                     style={{
-                      backgroundColor: 'var(--bg-elevated)',
-                      boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
                       transform: 'rotate(2deg)',
+                      boxShadow: '0 1px 3px rgba(17,17,17,0.10)',
                     }}
-                    className="absolute right-5 top-3 h-16 w-20 rounded-md p-2 text-start"
+                    className="absolute right-[16px] top-[12px] h-[92px] w-[96px] rounded-lg bg-white p-2.5 text-start"
                   >
-                    <div className="mb-1 font-mono text-[7px] font-bold uppercase text-[var(--ink-3)]">
-                      {folder.id.toUpperCase()}
+                    <div className="mb-2 text-[8px] font-bold uppercase tracking-[0.06em] text-[#111]">
+                      {art.label}
                     </div>
-                    <div className="mb-1 h-1 w-11 rounded-full bg-[var(--ink-4)] opacity-40" />
-                    <div className="h-1 w-9 rounded-full bg-[var(--ink-4)] opacity-40" />
+                    <div className="mb-1.5 h-px w-full bg-[#111]/10" />
+                    <div className="mb-1.5 h-px w-full bg-[#111]/10" />
+                    <div className="h-px w-3/4 bg-[#111]/10" />
                   </div>
 
-                  {/* Front Pocket Body */}
-                  <div
+                  <svg
+                    viewBox="0 0 200 96"
                     style={{
-                      backgroundColor: isSelected
-                        ? 'var(--ink-1)'
-                        : 'var(--ink-2)',
-                      boxShadow: '0 6px 14px -4px rgba(0,0,0,0.22)',
+                      filter: `drop-shadow(0 10px 14px ${art.deep}59)`,
                     }}
-                    className="absolute inset-x-1 bottom-0 h-20 rounded-xl p-2.5 transition-colors"
+                    className="absolute inset-x-0 bottom-0 h-[96px] w-full"
                   >
-                    <div className="flex h-full items-end justify-between">
-                      <span
-                        style={{
-                          backgroundColor: 'var(--bg-elevated)',
-                          color: 'var(--ink-1)',
-                        }}
-                        className="flex size-6 items-center justify-center rounded-full shadow-sm"
-                      >
-                        <Icon className="size-3.5" />
-                      </span>
-                      <span className="font-mono text-[10px] font-medium text-[var(--bg-canvas)] opacity-80">
-                        0{folder.count}
-                      </span>
-                    </div>
-                  </div>
+                    <defs>
+                      <linearGradient id={`${gid}-front`} x1="0" y1="0" x2="0.35" y2="1">
+                        <stop offset="0%" stopColor={art.light} />
+                        <stop offset="100%" stopColor={art.base} />
+                      </linearGradient>
+                      <linearGradient id={`${gid}-rim`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#fff" stopOpacity="0.9" />
+                        <stop offset="35%" stopColor="#fff" stopOpacity="0" />
+                      </linearGradient>
+                    </defs>
+                    <path
+                      d="M0 20 Q0 10 10 10 H116 Q122 10 126 6 L129 3 Q132 0 137 0 H190 Q200 0 200 10 V84 Q200 96 188 96 H12 Q0 96 0 84 Z"
+                      fill={`url(#${gid}-front)`}
+                    />
+                    <path
+                      d="M0 20 Q0 10 10 10 H116 Q122 10 126 6 L129 3 Q132 0 137 0 H190 Q200 0 200 10 V84 Q200 96 188 96 H12 Q0 96 0 84 Z"
+                      fill="none"
+                      stroke={`url(#${gid}-rim)`}
+                      strokeWidth="1.5"
+                    />
+                  </svg>
+
+                  <span
+                    style={{ textShadow: `0 1px 2px ${art.deep}80` }}
+                    className="pointer-events-none absolute inset-x-0 bottom-5 text-center text-[26px] font-semibold tracking-[-0.03em] text-white/90"
+                  >
+                    {art.label}
+                  </span>
+                  <span
+                    style={{ color: art.deep }}
+                    className="pointer-events-none absolute bottom-3 right-4 font-mono text-[10px] font-semibold [font-variant-numeric:tabular-nums]"
+                  >
+                    {String(folder.count).padStart(2, '0')}
+                  </span>
                 </div>
 
                 <div className="text-sm font-semibold text-[var(--ink-1)]">
@@ -480,10 +521,13 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
 
             <div
               style={{
-                backgroundColor: '#1B1A18',
-                color: '#EAE4DC',
+                backgroundColor: INSPECTOR.bg,
+                color: INSPECTOR.fg,
                 boxShadow: '0 16px 34px -8px rgba(0, 0, 0, 0.35)',
                 border: '1px solid rgba(255,255,255,0.1)',
+                ['--inspector-fg' as string]: INSPECTOR.fg,
+                ['--inspector-muted' as string]: INSPECTOR.muted,
+                ['--inspector-signal' as string]: INSPECTOR.signal,
               }}
               className="relative z-10 flex h-[228px] flex-col justify-between rounded-xl p-5 sm:h-[224px] sm:p-6"
             >
@@ -493,7 +537,7 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
               >
                 {/* Top Monospace Index Line + Excerpt */}
                 <div>
-                  <div className="mb-2.5 flex items-center justify-between font-mono text-[11px] tracking-[0.06em] text-[#8F887F] [font-variant-numeric:tabular-nums]">
+                  <div className="mb-2.5 flex items-center justify-between font-mono text-[11px] tracking-[0.06em] text-[var(--inspector-muted)] [font-variant-numeric:tabular-nums]">
                     <span>
                       FILE {String(inspectedIndex + 1).padStart(3, '0')} /{' '}
                       {String(filteredDocs.length).padStart(3, '0')} ·{' '}
@@ -506,8 +550,8 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
                         title={inspectedDoc.pinned ? 'Unpin' : 'Pin to top'}
                         className={`rounded p-1 transition-colors hover:bg-white/10 ${
                           inspectedDoc.pinned
-                            ? 'text-[#D4845A]'
-                            : 'text-[#8F887F]'
+                            ? 'text-[var(--inspector-signal)]'
+                            : 'text-[var(--inspector-muted)]'
                         }`}
                       >
                         <Pin className="size-3.5" />
@@ -523,7 +567,7 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
                             )
                           }
                           title="Delete manuscript"
-                          className="rounded p-1 text-[#8F887F] transition-colors hover:bg-white/10 hover:text-red-400"
+                          className="rounded p-1 text-[var(--inspector-muted)] transition-colors hover:bg-white/10 hover:text-red-400"
                         >
                           <Trash2 className="size-3.5" />
                         </button>
@@ -560,7 +604,7 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
                         </div>
                       </div>
                     ) : (
-                      <p className="line-clamp-3 font-mono text-xs leading-relaxed text-[#EAE4DC]/90 sm:text-[13px]">
+                      <p className="line-clamp-3 font-mono text-xs leading-relaxed text-[var(--inspector-fg)]/90 sm:text-[13px]">
                         &ldquo;{inspectedExcerpt}&rdquo;
                       </p>
                     )}
@@ -573,7 +617,7 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
                     <div className="truncate font-mono text-xs font-semibold uppercase tracking-[0.05em] text-white">
                       {inspectedDoc.title || 'UNTITLED MANUSCRIPT'}
                     </div>
-                    <div className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.04em] text-[#8F887F] [font-variant-numeric:tabular-nums]">
+                    <div className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.04em] text-[var(--inspector-muted)] [font-variant-numeric:tabular-nums]">
                       {inspectedDoc.kind === 'book'
                         ? `${inspectedDoc.units?.length || 1} CHAPTERS`
                         : inspectedDoc.kind === 'screenplay'
@@ -589,16 +633,16 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
                       <button
                         type="button"
                         onClick={() => onSelectDocBirdsEye(inspectedDoc.id)}
-                        className="flex h-8 items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 font-mono text-[11px] font-medium text-[#EAE4DC] transition-colors hover:bg-white/15"
+                        className="flex h-8 items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 font-mono text-[11px] font-medium text-[var(--inspector-fg)] transition-colors hover:bg-white/15"
                       >
-                        <Layers className="size-3 text-[#D4845A]" />
+                        <Layers className="size-3 text-[var(--inspector-signal)]" />
                         <span>TIMELINE</span>
                       </button>
                     )}
                     <button
                       type="button"
                       onClick={() => onSelectDocAndWrite(inspectedDoc.id)}
-                      style={{ backgroundColor: '#EAE4DC', color: '#141312' }}
+                      style={{ backgroundColor: INSPECTOR.butter, color: '#111111' }}
                       className="flex h-8 items-center gap-1 rounded-lg px-3.5 font-mono text-[11px] font-semibold uppercase tracking-[0.04em] transition-transform active:scale-95"
                     >
                       <span>OPEN FILE</span>
@@ -630,8 +674,16 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
                   type="button"
                   onClick={() => setSelectedCategory(divTab.id)}
                   style={{
-                    backgroundColor: active ? 'var(--accent)' : '#1C1917',
-                    color: '#FAF7F2',
+                    ...(active
+                      ? toneChip(
+                          divTab.id === 'all'
+                            ? 'blush'
+                            : WORK_KIND_TONE[divTab.id]
+                        )
+                      : {
+                          backgroundColor: 'var(--ink-1)',
+                          color: 'var(--bg-canvas)',
+                        }),
                     clipPath: 'polygon(12% 0%, 88% 0%, 100% 100%, 0% 100%)',
                   }}
                   className="h-6 px-4 font-mono text-[10px] font-semibold tracking-[0.08em] transition-opacity hover:opacity-90"
@@ -647,11 +699,12 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
             const isInspected = doc.id === inspectedDoc?.id;
             const widthPercent = Math.min(98, 90 + idx * 1.35);
             const tabLeft = tabPositions[idx % tabPositions.length];
+            const tone = toneVar(WORK_KIND_TONE[doc.kind]);
             const folderBg = isInspected
-              ? 'var(--bg-elevated)'
-              : 'var(--bg-surface)';
+              ? tone
+              : `color-mix(in srgb, ${tone} 42%, var(--bg-surface))`;
             const borderColor = isInspected
-              ? 'var(--accent)'
+              ? 'var(--ink-1)'
               : 'var(--border-strong)';
 
             return (
@@ -693,7 +746,7 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
                         opacity: isInspected ? 1 : 0,
                         pointerEvents: isInspected ? 'auto' : 'none',
                       }}
-                      className="font-mono text-[10px] font-semibold text-[var(--accent)] transition-opacity duration-150 hover:underline"
+                      className="rounded-full bg-[var(--ink-1)] px-2 py-0.5 font-mono text-[10px] font-semibold text-[var(--bg-canvas)] transition-opacity duration-150 hover:underline"
                     >
                       OPEN →
                     </button>
@@ -724,16 +777,14 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
                       <span
                         style={{
                           backgroundColor: isInspected
-                            ? 'var(--accent)'
-                            : 'var(--ink-4)',
+                            ? 'var(--signal)'
+                            : 'var(--ink-3)',
                         }}
                         className="size-1.5 shrink-0 rounded-full"
                       />
                       <span
                         style={{
-                          color: isInspected
-                            ? 'var(--accent)'
-                            : 'var(--ink-1)',
+                          color: 'var(--on-pastel)',
                         }}
                         className="truncate font-mono text-[10px] font-semibold uppercase tracking-[0.06em]"
                       >
@@ -754,9 +805,9 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
                   >
                     <span
                       style={{
-                        opacity: isInspected ? 1 : 0.55,
+                        opacity: isInspected ? 1 : 0.7,
                       }}
-                      className="font-mono text-[10px] text-[var(--ink-3)] transition-opacity duration-150"
+                      className="font-mono text-[10px] text-[var(--on-pastel)] transition-opacity duration-150"
                     >
                       {doc.kind.toUpperCase()} ·{' '}
                       {doc.kind === 'essay'
@@ -791,5 +842,6 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
         </div>
       </div>
     </div>
+    </>
   );
 };

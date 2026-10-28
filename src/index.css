@@ -2,32 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Palette borrows from Still Reading: warm paper canvas, ink-black actions,
+ * a red-orange signal, and a soft pastel family (butter, sage, blush,
+ * lavender, sky, honey) that tags kinds, statuses and progress.
+ * Pastels are fills; text on them uses --on-pastel. --accent is the
+ * text-safe signal; --signal is for dots, bars and rings only.
+ */
 :root,
 [data-theme="paper"] {
-  --bg-canvas: #FAF7F2;
-  --bg-surface: #F3EFE8;
+  --bg-canvas: #F6F2EA;
+  --bg-surface: #EFEAE0;
   --bg-elevated: #FFFFFF;
-  --bg-subtle: rgba(28, 25, 23, 0.04);
-  --bg-subtle-hover: rgba(28, 25, 23, 0.075);
-  --ink-1: #1C1917;
-  --ink-2: #524B44;
-  --ink-3: #857D74;
-  --ink-4: #A8A096;
-  --accent: #9A4B26;
-  --accent-soft: rgba(154, 75, 38, 0.12);
-  --selection-bg: rgba(154, 75, 38, 0.16);
-  --border-subtle: rgba(28, 25, 23, 0.08);
-  --border-strong: rgba(28, 25, 23, 0.15);
-  --caret-color: #9A4B26;
+  --bg-subtle: rgba(17, 17, 17, 0.04);
+  --bg-subtle-hover: rgba(17, 17, 17, 0.07);
+  --ink-1: #111111;
+  --ink-2: #3B3A38;
+  --ink-3: #77736B;
+  --ink-4: #A8A399;
+  --accent: #C8371F;
+  --accent-soft: rgba(255, 75, 54, 0.12);
+  --signal: #FF4B36;
+  --good: #3F7D4E;
+  --selection-bg: rgba(200, 199, 251, 0.65);
+  --border-subtle: rgba(17, 17, 17, 0.08);
+  --border-strong: rgba(17, 17, 17, 0.15);
+  --caret-color: #FF4B36;
+
+  --butter: #F6DD8B;
+  --sage: #ABC07F;
+  --blush: #F4BBD9;
+  --lavender: #C8C7FB;
+  --sky: #BDD3F4;
+  --honey: #E3B23C;
+  --on-pastel: #111111;
 
   --elevation-raised:
-    0 0 0 1px rgb(28 25 23 / 0.06),
-    0 1px 3px rgb(28 25 23 / 0.05),
-    0 6px 16px -4px rgb(28 25 23 / 0.06);
+    0 0 0 1px rgb(17 17 17 / 0.05),
+    0 1px 2px rgb(17 17 17 / 0.04),
+    0 8px 24px -6px rgb(17 17 17 / 0.06);
   --elevation-floating:
-    0 0 0 1px rgb(28 25 23 / 0.08),
-    0 4px 12px -2px rgb(28 25 23 / 0.08),
-    0 16px 32px -6px rgb(28 25 23 / 0.1);
+    0 0 0 1px rgb(17 17 17 / 0.07),
+    0 4px 12px -2px rgb(17 17 17 / 0.08),
+    0 16px 40px -8px rgb(17 17 17 / 0.16);
 }
 
 [data-theme="sepia"] {
@@ -38,14 +55,24 @@
   --bg-subtle-hover: rgba(42, 33, 25, 0.09);
   --ink-1: #261E18;
   --ink-2: #594C41;
-  --ink-3: #87786A;
+  --ink-3: #7A6B5E;
   --ink-4: #AA9B8C;
-  --accent: #8C3F19;
-  --accent-soft: rgba(140, 63, 25, 0.14);
-  --selection-bg: rgba(140, 63, 25, 0.18);
+  --accent: #B8341C;
+  --accent-soft: rgba(240, 85, 58, 0.14);
+  --signal: #F0553A;
+  --good: #4A7A45;
+  --selection-bg: rgba(205, 197, 232, 0.7);
   --border-subtle: rgba(42, 33, 25, 0.09);
   --border-strong: rgba(42, 33, 25, 0.17);
-  --caret-color: #8C3F19;
+  --caret-color: #F0553A;
+
+  --butter: #EED28A;
+  --sage: #B3BE86;
+  --blush: #E9BCCB;
+  --lavender: #CDC5E8;
+  --sky: #C3D0E2;
+  --honey: #D9A535;
+  --on-pastel: #261E18;
 
   --elevation-raised:
     0 0 0 1px rgb(42 33 25 / 0.07),
@@ -65,14 +92,25 @@
   --bg-subtle-hover: rgba(235, 229, 220, 0.09);
   --ink-1: #EAE4DC;
   --ink-2: #A8A199;
-  --ink-3: #756F68;
+  --ink-3: #807A72;
   --ink-4: #524D47;
-  --accent: #D4845A;
-  --accent-soft: rgba(212, 132, 90, 0.16);
-  --selection-bg: rgba(212, 132, 90, 0.24);
+  --accent: #FF7A63;
+  --accent-soft: rgba(255, 106, 82, 0.16);
+  --signal: #FF6A52;
+  --good: #8DB87A;
+  --selection-bg: rgba(200, 199, 251, 0.24);
   --border-subtle: #262421;
   --border-strong: #33302C;
-  --caret-color: #D4845A;
+  --caret-color: #FF6A52;
+
+  /* Pastels become deep tinted surfaces at night; text flips to light ink */
+  --butter: #3B3320;
+  --sage: #2B3423;
+  --blush: #3D2633;
+  --lavender: #2C2A47;
+  --sky: #212F40;
+  --honey: #E3B23C;
+  --on-pastel: #EAE4DC;
 
   /* Dark mode flattens shadows to subtle 1px white rings */
   --elevation-raised: 0 0 0 1px rgb(255 255 255 / 0.09);

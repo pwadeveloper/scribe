@@ -3,6 +3,7 @@ import gsap from 'gsap';
 import { BookOpen, Film, Feather, X, Check } from 'lucide-react';
 import { WorkKind } from '../types';
 import { canHover, gsapButtonHover, prefersReducedMotion } from '../motion';
+import { WORK_KIND_TONE, toneChip, toneVar } from '../palette';
 
 interface NewWorkModalProps {
   open: boolean;
@@ -142,7 +143,10 @@ export const NewWorkModal: React.FC<NewWorkModalProps> = ({
       >
         <div className="mb-5 flex items-start justify-between">
           <div>
-            <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--accent)]">
+            <span
+              style={toneChip(WORK_KIND_TONE[selectedKind])}
+              className="inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.08em] transition-colors duration-150"
+            >
               New Manuscript
             </span>
             <h2
@@ -168,6 +172,7 @@ export const NewWorkModal: React.FC<NewWorkModalProps> = ({
             {formats.map((fmt) => {
               const Icon = fmt.icon;
               const active = selectedKind === fmt.id;
+              const tone = WORK_KIND_TONE[fmt.id];
               return (
                 <button
                   key={fmt.id}
@@ -176,30 +181,28 @@ export const NewWorkModal: React.FC<NewWorkModalProps> = ({
                   {...btnHover}
                   style={{
                     backgroundColor: active
-                      ? 'var(--bg-canvas)'
+                      ? `color-mix(in srgb, ${toneVar(tone)} 55%, var(--bg-elevated))`
                       : 'var(--bg-surface)',
                     boxShadow: active
-                      ? '0 0 0 2px var(--accent), var(--elevation-raised)'
+                      ? '0 0 0 2px var(--ink-1), var(--elevation-raised)'
                       : 'inset 0 0 0 var(--border-hairline) var(--border-subtle)',
                   }}
                   className="flex flex-col items-start rounded-xl p-3.5 text-start transition-shadow duration-150"
                 >
                   <div className="mb-2 flex w-full items-center justify-between">
                     <span
-                      style={{
-                        backgroundColor: active
-                          ? 'var(--accent-soft)'
-                          : 'var(--bg-subtle)',
-                        color: active ? 'var(--accent)' : 'var(--ink-2)',
-                      }}
-                      className="flex size-8 items-center justify-center rounded-lg"
+                      style={toneChip(tone)}
+                      className="flex size-8 items-center justify-center rounded-full"
                     >
                       <Icon className="size-4" strokeWidth={1.85} />
                     </span>
                     {active && (
                       <span
-                        style={{ backgroundColor: 'var(--accent)' }}
-                        className="flex size-4 items-center justify-center rounded-full text-white"
+                        style={{
+                          backgroundColor: 'var(--ink-1)',
+                          color: 'var(--bg-canvas)',
+                        }}
+                        className="flex size-4 items-center justify-center rounded-full"
                       >
                         <Check className="size-2.5" strokeWidth={3} />
                       </span>
@@ -208,10 +211,18 @@ export const NewWorkModal: React.FC<NewWorkModalProps> = ({
                   <div className="text-sm font-semibold text-[var(--ink-1)]">
                     {fmt.name}
                   </div>
-                  <div className="mt-0.5 text-[11px] font-medium text-[var(--accent)]">
+                  <div
+                    className={`mt-0.5 text-[11px] font-medium ${
+                      active ? 'text-[var(--on-pastel)]' : 'text-[var(--ink-2)]'
+                    }`}
+                  >
                     {fmt.tagline}
                   </div>
-                  <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--ink-3)]">
+                  <p
+                    className={`mt-1.5 text-[11px] leading-relaxed ${
+                      active ? 'text-[var(--ink-2)]' : 'text-[var(--ink-3)]'
+                    }`}
+                  >
                     {fmt.description}
                   </p>
                 </button>

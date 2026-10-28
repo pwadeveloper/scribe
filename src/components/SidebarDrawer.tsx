@@ -23,6 +23,7 @@ import {
   getUnitBadgeLabel,
 } from '../editorUtils';
 import { gsapButtonHover, gsapRowHover, prefersReducedMotion } from '../motion';
+import { WORK_KIND_TONE, toneChip, toneVar } from '../palette';
 
 interface SidebarDrawerProps {
   open: boolean;
@@ -202,18 +203,20 @@ export const SidebarDrawer: React.FC<SidebarDrawerProps> = ({
                 className="flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-start transition-colors hover:bg-[var(--bg-subtle-hover)]"
               >
                 <div className="flex items-center gap-2">
-                  <FolderIcon
-                    className="size-4 shrink-0 text-[var(--ink-1)]"
-                    strokeWidth={1.9}
-                  />
+                  <span
+                    style={toneChip(WORK_KIND_TONE[cat.kind])}
+                    className="flex size-6 shrink-0 items-center justify-center rounded-full"
+                  >
+                    <FolderIcon className="size-3.5" strokeWidth={1.9} />
+                  </span>
                   <span className="text-xs font-semibold text-[var(--ink-1)]">
                     {cat.label}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span
-                    style={{ backgroundColor: 'var(--bg-subtle)' }}
-                    className="rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold text-[var(--ink-2)] [font-variant-numeric:tabular-nums]"
+                    style={toneChip(WORK_KIND_TONE[cat.kind])}
+                    className="rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold [font-variant-numeric:tabular-nums]"
                   >
                     {cat.docs.length}
                   </span>
@@ -268,7 +271,8 @@ export const SidebarDrawer: React.FC<SidebarDrawerProps> = ({
                         >
                           <div className="flex min-w-0 items-center gap-1.5">
                             <Folder
-                              className="size-3.5 shrink-0 text-[var(--accent)]"
+                              className="size-3.5 shrink-0 text-[var(--ink-2)]"
+                              fill={toneVar(WORK_KIND_TONE[doc.kind])}
                               strokeWidth={1.85}
                             />
                             <span
@@ -406,10 +410,12 @@ export const SidebarDrawer: React.FC<SidebarDrawerProps> = ({
         >
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-1.5">
-              <KindIcon
-                className="size-3.5 shrink-0 text-[var(--accent)]"
-                strokeWidth={1.85}
-              />
+              <span
+                style={toneChip(WORK_KIND_TONE[doc.kind])}
+                className="flex size-6 shrink-0 items-center justify-center rounded-full"
+              >
+                <KindIcon className="size-3.5" strokeWidth={1.85} />
+              </span>
               <span
                 className="truncate text-sm font-medium"
                 style={{ color: isActive ? 'var(--ink-1)' : 'var(--ink-2)' }}

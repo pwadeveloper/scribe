@@ -33,6 +33,7 @@ import {
   WriterSettings,
 } from '../types';
 import { gsapButtonHover, gsapRowHover, prefersReducedMotion } from '../motion';
+import { WORK_KIND_TONE, toneChip } from '../palette';
 
 interface TopBarProps {
   isTyping: boolean;
@@ -214,11 +215,12 @@ export const TopBar: React.FC<TopBarProps> = ({
           {...btnHover}
           title="New Book, Screenplay, or Essay"
           style={{
-            backgroundColor: 'var(--bg-surface)',
+            backgroundColor: 'var(--ink-1)',
+            color: 'var(--bg-canvas)',
           }}
-          className="flex h-7 items-center gap-1 rounded-lg px-2 text-xs font-medium text-[var(--ink-2)] transition-colors hover:bg-[var(--bg-subtle-hover)] hover:text-[var(--ink-1)]"
+          className="flex h-7 items-center gap-1 rounded-full px-2.5 text-xs font-medium transition-opacity hover:opacity-90"
         >
-          <Plus className="size-3.5 text-[var(--accent)]" strokeWidth={2} />
+          <Plus className="size-3.5" strokeWidth={2} />
           <span className="hidden md:inline">New</span>
         </button>
 
@@ -232,10 +234,10 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         <div className="flex min-w-0 items-center gap-2">
           <span
-            style={{ backgroundColor: 'var(--bg-subtle)' }}
-            className="hidden items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium capitalize text-[var(--ink-2)] sm:inline-flex"
+            style={toneChip(WORK_KIND_TONE[workKind])}
+            className="hidden items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize sm:inline-flex"
           >
-            <KindIcon className="size-3 text-[var(--accent)]" />
+            <KindIcon className="size-3" />
             {workKind}
           </span>
 
@@ -475,9 +477,9 @@ export const TopBar: React.FC<TopBarProps> = ({
                     {
                       id: 'paper',
                       label: 'Paper',
-                      bg: '#FAF7F2',
-                      fg: '#1C1917',
-                      ring: 'rgba(28,25,23,0.14)',
+                      bg: '#F6F2EA',
+                      fg: '#111111',
+                      ring: 'rgba(17,17,17,0.14)',
                     },
                     {
                       id: 'sepia',

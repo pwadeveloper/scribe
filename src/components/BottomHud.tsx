@@ -183,9 +183,9 @@ export const BottomHud: React.FC<BottomHudProps> = ({
                   {...btnHover}
                   style={{
                     backgroundColor: active
-                      ? 'var(--accent-soft)'
+                      ? 'var(--butter)'
                       : 'var(--bg-surface)',
-                    color: active ? 'var(--accent)' : 'var(--ink-2)',
+                    color: active ? 'var(--on-pastel)' : 'var(--ink-2)',
                   }}
                   className="rounded-lg py-1.5 text-[11px] font-medium transition-colors duration-150 ease-out hover:text-[var(--ink-1)]"
                 >
@@ -225,7 +225,7 @@ export const BottomHud: React.FC<BottomHudProps> = ({
             cy="9"
             r={radius}
             fill="none"
-            stroke="var(--accent)"
+            stroke={progress >= 100 ? 'var(--good)' : 'var(--signal)'}
             strokeWidth="2"
             strokeLinecap="round"
             strokeDasharray={circumference}

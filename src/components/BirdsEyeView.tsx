@@ -37,7 +37,17 @@ import {
   getUnitBadgeLabel,
 } from '../editorUtils';
 import { canHover, gsapButtonHover, prefersReducedMotion } from '../motion';
-import { SegmentedTickMeter } from './ProjectCabinetView';
+import { INSPECTOR, SegmentedTickMeter } from './ProjectCabinetView';
+import { NarrativeTimeline } from './NarrativeTimeline';
+import {
+  SECTION_KIND_TONE,
+  STATUS_STYLE,
+  WORK_KIND_TONE,
+  timeOfDayTone,
+  toneChip,
+  toneVar,
+  toneWash,
+} from '../palette';
 
 interface BirdsEyeViewProps {
   doc: DocumentItem;
@@ -123,6 +133,17 @@ function extractSceneDialogueMeta(html: string): {
   };
 }
 
+function extractHeadingBeats(html: string): string[] {
+  const temp = document.createElement('div');
+  temp.innerHTML = html;
+  return Array.from(temp.querySelectorAll('h1, h2, h3'))
+    .map((node) => (node.textContent || '').trim())
+    .filter(Boolean);
+}
+
+const toTitleCase = (name: string) =>
+  name.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+
 export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
   doc,
   activeUnitId,
@@ -204,17 +225,29 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
           ? 'In Progress'
           : 'Outline';
 
-      const statusColor =
-        statusLabel === 'Polished'
-          ? '#3B7A57'
-          : statusLabel === 'In Progress'
-          ? 'var(--accent)'
-          : 'var(--ink-3)';
+      const statusStyle = STATUS_STYLE[statusLabel];
+      const statusColor = statusStyle.dot;
+      const statusFill = statusStyle.tone
+        ? toneVar(statusStyle.tone)
+        : 'var(--bg-surface)';
+      const sectionTone =
+        doc.kind === 'screenplay' && parsedSlug
+          ? timeOfDayTone(parsedSlug.timeOfDay)
+          : SECTION_KIND_TONE[unit.unitKind];
+
+      const beats =
+        doc.kind === 'screenplay'
+          ? dialogueMeta.characters.map(toTitleCase)
+          : extractHeadingBeats(unit.contentHtml);
+      if (beats.length === 0 && unit.synopsis?.trim()) {
+        beats.push(unit.synopsis.trim());
+      }
 
       return {
         unit,
         index,
         metrics: m,
+        beats,
         startMinute,
         startWord,
         durationMinutes,
@@ -224,6 +257,8 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
         dialogueMeta,
         statusLabel,
         statusColor,
+        statusFill,
+        sectionTone,
       };
     });
   }, [units, doc.kind, targetWordsPerUnit]);
@@ -298,439 +333,8 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
     });
   };
 
-  const scrollToTimelineUnit = (unitId: string) => {
-    const node = document.getElementById(`timeline-node-${unitId}`);
-    if (node) {
-      node.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      if (!prefersReducedMotion()) {
-        gsap.fromTo(
-          node,
-          { boxShadow: '0 0 0 3px var(--accent)' },
-          {
-            boxShadow:
-              unitId === activeUnitId
-                ? '0 0 0 2px var(--accent), var(--elevation-raised)'
-                : 'var(--elevation-raised)',
-            duration: 0.9,
-            ease: 'power2.out',
-          }
-        );
-      }
-    }
-  };
-
-  const renderTimeOfDayBadge = (tod: string) => {
-    const isNight = tod.includes('NIGHT') || tod.includes('EVENING');
-    const isDawnDusk =
-      tod.includes('DAWN') || tod.includes('DUSK') || tod.includes('MORNING');
-    const Icon = isNight ? Moon : isDawnDusk ? Sunrise : Sun;
-
-    return (
-      <span
-        style={{
-          backgroundColor: isNight
-            ? 'rgba(30, 41, 59, 0.14)'
-            : 'var(--accent-soft)',
-          color: isNight ? 'var(--ink-1)' : 'var(--accent)',
-        }}
-        className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.05em]"
-      >
-        <Icon className="size-2.5" />
-        {tod}
-      </span>
-    );
-  };
-
   // ============================================================================
-  // 1. TIMELINE NODE RENDERER (Primary Narrative Spine View)
-  // ============================================================================
-  const renderTimelineNode = (item: (typeof enrichedUnits)[number]) => {
-    const {
-      unit,
-      index,
-      metrics: unitMetrics,
-      startMinute,
-      durationMinutes,
-      badge,
-      snippet,
-      parsedSlug,
-      dialogueMeta,
-      statusLabel,
-      statusColor,
-    } = item;
-    const isActive = unit.id === activeUnitId;
-    const isConfirmingDelete = confirmDeleteUnitId === unit.id;
-    const partObj = parts.find((p) => p.id === unit.partId);
-
-    // Check if this unit starts a new Part along the timeline spine
-    const prevUnit = index > 0 ? units[index - 1] : null;
-    const isFirstInPart =
-      hasParts && unit.partId && (!prevUnit || prevUnit.partId !== unit.partId);
-
-    return (
-      <React.Fragment key={unit.id}>
-        {/* Part Milestone Banner on the Timeline Spine (for Books with Parts) */}
-        {isFirstInPart && partObj && (
-          <div className="relative flex items-center gap-4 pb-2 pt-4">
-            <div
-              style={{
-                backgroundColor: 'var(--accent)',
-                color: 'var(--bg-canvas)',
-              }}
-              className="relative z-10 flex size-8 shrink-0 items-center justify-center rounded-xl font-mono text-xs font-bold shadow-sm sm:w-28"
-            >
-              <Layers className="size-3.5 sm:mr-1.5" />
-              <span className="hidden sm:inline">PART</span>
-            </div>
-            <div
-              style={{
-                backgroundColor: 'var(--bg-surface)',
-                border: '1px solid var(--border-subtle)',
-              }}
-              className="flex flex-1 flex-wrap items-center justify-between gap-2 rounded-xl px-4 py-2.5"
-            >
-              <input
-                type="text"
-                value={partObj.title}
-                onChange={(e) => onRenamePart(partObj.id, e.target.value)}
-                placeholder="Part Title (e.g., Part I: The Departure)"
-                className="min-w-[200px] flex-1 bg-transparent font-serif text-lg font-semibold text-[var(--ink-1)] focus:outline-none"
-              />
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => onAddUnit('chapter', partObj.id)}
-                  className="flex items-center gap-1 rounded-lg bg-[var(--bg-elevated)] px-2.5 py-1 text-xs font-medium text-[var(--ink-2)] hover:text-[var(--ink-1)]"
-                >
-                  <Plus className="size-3" />
-                  <span>Add Chapter</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Timeline Row */}
-        <div
-          data-birdseye-tile="true"
-          className="group relative flex items-stretch gap-3 sm:gap-5"
-        >
-          {/* Left Spine Column: Timestamp + Sequence Node + Vertical Connector */}
-          <div className="relative flex w-10 shrink-0 flex-col items-center sm:w-28 sm:items-end sm:pr-3">
-            {/* Vertical Spine Line */}
-            {index < enrichedUnits.length - 1 && (
-              <div
-                style={{ backgroundColor: 'var(--border-strong)' }}
-                className="absolute bottom-0 right-5 top-8 w-[1.5px] sm:right-[19px]"
-              />
-            )}
-
-            <div className="flex items-center gap-2.5 pt-3">
-              {/* Cumulative Runtime / Reading Offset (Desktop) */}
-              <div className="hidden text-right font-mono text-[10px] leading-tight text-[var(--ink-3)] [font-variant-numeric:tabular-nums] sm:block">
-                <div className="font-semibold text-[var(--ink-2)]">
-                  +{String(startMinute).padStart(2, '0')}:00
-                </div>
-                <div>
-                  {doc.kind === 'screenplay'
-                    ? `~${durationMinutes}p`
-                    : `${durationMinutes}m read`}
-                </div>
-              </div>
-
-              {/* Circular Timeline Node Marker */}
-              <button
-                type="button"
-                onClick={() => onSelectUnitAndWrite(unit.id)}
-                title={`Jump into ${badge}`}
-                style={{
-                  backgroundColor: isActive
-                    ? 'var(--accent)'
-                    : 'var(--bg-elevated)',
-                  color: isActive ? '#FAF7F2' : 'var(--ink-1)',
-                  boxShadow: isActive
-                    ? '0 0 0 3px var(--accent-soft)'
-                    : '0 0 0 1.5px var(--border-strong)',
-                }}
-                className="relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-bold transition-transform duration-150 group-hover:scale-110 [font-variant-numeric:tabular-nums]"
-              >
-                {String(index + 1).padStart(2, '0')}
-              </button>
-            </div>
-          </div>
-
-          {/* Right Timeline Card (Inspired by Image 2 Card Anatomy + Screenplay Stripboard) */}
-          <div
-            id={`timeline-node-${unit.id}`}
-            onMouseEnter={handleTileHoverEnter}
-            onMouseLeave={handleTileHoverLeave}
-            style={{
-              backgroundColor: 'var(--bg-elevated)',
-              boxShadow: isActive
-                ? '0 0 0 2px var(--accent), var(--elevation-raised)'
-                : 'var(--elevation-raised)',
-            }}
-            className="mb-4 flex-1 rounded-2xl p-4 transition-shadow duration-150 sm:p-5"
-          >
-            {/* Card Header Row: Status Pill + Badge + Time-of-Day + Reorder Controls */}
-            <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-1.5">
-                {/* Status Dot Pill (Image 2 style: • In Progress / • Polished) */}
-                <span
-                  style={{ backgroundColor: 'var(--bg-surface)' }}
-                  className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium text-[var(--ink-2)]"
-                >
-                  <span
-                    style={{ backgroundColor: statusColor }}
-                    className="size-1.5 rounded-full"
-                  />
-                  {statusLabel}
-                </span>
-
-                {/* Unit Badge Pill */}
-                <span
-                  style={{
-                    backgroundColor: isActive
-                      ? 'var(--accent-soft)'
-                      : 'var(--bg-surface)',
-                    color: isActive ? 'var(--accent)' : 'var(--ink-2)',
-                  }}
-                  className="rounded-md px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.04em]"
-                >
-                  {badge}
-                </span>
-
-                {/* Screenplay INT/EXT & Time-of-Day Pills */}
-                {doc.kind === 'screenplay' && parsedSlug && (
-                  <>
-                    <span
-                      style={{
-                        backgroundColor:
-                          parsedSlug.env === 'EXT'
-                            ? 'rgba(59, 122, 87, 0.14)'
-                            : 'var(--bg-surface)',
-                        color:
-                          parsedSlug.env === 'EXT'
-                            ? '#3B7A57'
-                            : 'var(--ink-1)',
-                      }}
-                      className="rounded-md px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-[0.06em]"
-                    >
-                      {parsedSlug.env}.
-                    </span>
-                    {renderTimeOfDayBadge(parsedSlug.timeOfDay)}
-                  </>
-                )}
-
-                {isActive && (
-                  <span className="rounded-md bg-[var(--accent)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">
-                    Active
-                  </span>
-                )}
-              </div>
-
-              {/* Action Controls */}
-              <div className="flex items-center gap-1 opacity-100 transition-opacity duration-150 focus-within:opacity-100 [@media(hover:hover)_and_(pointer:fine)]:opacity-0 [@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100">
-                {hasParts && (
-                  <select
-                    aria-label="Assign chapter to Part"
-                    value={unit.partId || ''}
-                    onChange={(e) =>
-                      onUpdateUnitMeta(unit.id, {
-                        partId: e.target.value || undefined,
-                      })
-                    }
-                    onClick={(e) => e.stopPropagation()}
-                    style={{ backgroundColor: 'var(--bg-surface)' }}
-                    className="mr-1 h-7 rounded-md px-1.5 text-xs text-[var(--ink-2)] focus:outline-none sm:h-6 sm:text-[11px]"
-                  >
-                    <option value="">Unassigned</option>
-                    {parts.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.title || 'Untitled Part'}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                <button
-                  type="button"
-                  disabled={index === 0}
-                  onClick={() => onMoveUnit(unit.id, -1)}
-                  aria-label="Move earlier in timeline"
-                  title="Move earlier in timeline"
-                  className="flex size-7 items-center justify-center rounded-md text-[var(--ink-3)] hover:bg-[var(--bg-subtle-hover)] hover:text-[var(--ink-1)] disabled:opacity-30 sm:size-6"
-                >
-                  <ArrowUp className="size-3.5" />
-                </button>
-                <button
-                  type="button"
-                  disabled={index === units.length - 1}
-                  onClick={() => onMoveUnit(unit.id, 1)}
-                  aria-label="Move later in timeline"
-                  title="Move later in timeline"
-                  className="flex size-7 items-center justify-center rounded-md text-[var(--ink-3)] hover:bg-[var(--bg-subtle-hover)] hover:text-[var(--ink-1)] disabled:opacity-30 sm:size-6"
-                >
-                  <ArrowDown className="size-3.5" />
-                </button>
-                {units.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmDeleteUnitId(unit.id)}
-                    aria-label="Delete section"
-                    title="Delete section"
-                    className="flex size-7 items-center justify-center rounded-md text-[var(--ink-3)] hover:bg-[var(--bg-subtle-hover)] hover:text-red-600 sm:size-6"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Main Clickable Content Area */}
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-              <div className="lg:col-span-8">
-                {doc.kind === 'screenplay' && (
-                  <div className="mb-1 font-mono text-xs font-semibold uppercase tracking-[0.04em] text-[var(--accent)]">
-                    {unit.slugline || 'INT. LOCATION - DAY'}
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => onSelectUnitAndWrite(unit.id)}
-                  className="block w-full text-start"
-                >
-                  <h3 className="font-serif text-xl font-semibold leading-snug text-[var(--ink-1)] transition-colors group-hover:text-[var(--accent)]">
-                    {unit.title.trim() ||
-                      (doc.kind === 'screenplay'
-                        ? parsedSlug?.location || 'Untitled Scene'
-                        : `Untitled ${badge}`)}
-                  </h3>
-                  <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-[var(--ink-2)] sm:text-[13px]">
-                    {snippet}
-                  </p>
-                </button>
-
-                {/* Image 2-inspired Metadata Row: ↳ dialogue/paragraphs · reading/screen time */}
-                <div className="mt-3 flex flex-wrap items-center gap-3 font-mono text-[11px] text-[var(--ink-3)] [font-variant-numeric:tabular-nums]">
-                  <span className="text-[var(--ink-4)]">↳</span>
-                  {doc.kind === 'screenplay' ? (
-                    <span className="inline-flex items-center gap-1">
-                      <MessageSquare className="size-3" />
-                      {dialogueMeta.dialogueCount}{' '}
-                      {dialogueMeta.dialogueCount === 1
-                        ? 'dialogue block'
-                        : 'dialogue blocks'}
-                    </span>
-                  ) : (
-                    <span>
-                      {unitMetrics.paragraphs}{' '}
-                      {unitMetrics.paragraphs === 1
-                        ? 'paragraph'
-                        : 'paragraphs'}
-                    </span>
-                  )}
-                  <span>·</span>
-                  <span className="inline-flex items-center gap-1">
-                    <Clock className="size-3" />
-                    {durationMinutes} min{' '}
-                    {doc.kind === 'screenplay' ? 'screen time' : 'read'}
-                  </span>
-
-                  {/* Character Badges for Screenplays */}
-                  {doc.kind === 'screenplay' &&
-                    dialogueMeta.characters.length > 0 && (
-                      <>
-                        <span>·</span>
-                        <div className="flex flex-wrap items-center gap-1">
-                          {dialogueMeta.characters.map((ch) => (
-                            <span
-                              key={ch}
-                              style={{ backgroundColor: 'var(--bg-surface)' }}
-                              className="rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[var(--ink-2)]"
-                            >
-                              {ch}
-                            </span>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                </div>
-              </div>
-
-              {/* Right Column: Synopsis Beat Note + Segmented Tick Meter (Image 2) */}
-              <div className="flex flex-col justify-between gap-2.5 border-t border-[var(--border-subtle)] pt-3 lg:col-span-4 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
-                <div>
-                  <label className="mb-1 block font-mono text-[10px] uppercase tracking-[0.06em] text-[var(--ink-3)]">
-                    {doc.kind === 'screenplay'
-                      ? 'Scene Beat / Intent'
-                      : 'Chapter Synopsis'}
-                  </label>
-                  <input
-                    type="text"
-                    value={unit.synopsis || ''}
-                    onChange={(e) =>
-                      onUpdateUnitMeta(unit.id, { synopsis: e.target.value })
-                    }
-                    placeholder={
-                      doc.kind === 'screenplay'
-                        ? 'What turns in this scene?'
-                        : 'Key narrative beat…'
-                    }
-                    style={{ backgroundColor: 'var(--bg-surface)' }}
-                    className="w-full rounded-lg px-2.5 py-1.5 text-base text-[var(--ink-2)] placeholder:text-[var(--ink-4)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] sm:text-xs"
-                  />
-                </div>
-
-                {/* Segmented Tick Progress Bar + Write Action (Image 2 Footer) */}
-                {!isConfirmingDelete ? (
-                  <div className="flex items-center justify-between gap-2 pt-1">
-                    <SegmentedTickMeter
-                      current={unitMetrics.words}
-                      target={targetWordsPerUnit}
-                      segments={10}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => onSelectUnitAndWrite(unit.id)}
-                      className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--ink-1)] transition-colors hover:bg-[var(--accent)] hover:text-white"
-                    >
-                      <span>Write</span>
-                      <ArrowUpRight className="size-3.5" />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between gap-2 pt-1 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => setConfirmDeleteUnitId(null)}
-                      className="rounded-md px-2 py-1 text-[var(--ink-2)] hover:bg-[var(--bg-subtle-hover)]"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onDeleteUnit(unit.id);
-                        setConfirmDeleteUnitId(null);
-                      }}
-                      className="rounded-md bg-red-600/15 px-2.5 py-1 font-medium text-red-600 hover:bg-red-600/25"
-                    >
-                      Delete {badge}
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </React.Fragment>
-    );
-  };
-
-  // ============================================================================
-  // 2. CARDS TILE RENDERER (Image 2 Kanban/Grid Card Anatomy)
+  // CARD TILE RENDERER (Cards layout)
   // ============================================================================
   const renderCardTile = (unit: DocumentUnit) => {
     const item = enrichedUnits.find((e) => e.unit.id === unit.id);
@@ -746,6 +350,8 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
       dialogueMeta,
       statusLabel,
       statusColor,
+      statusFill,
+      sectionTone,
     } = item;
     const isActive = unit.id === activeUnitId;
     const isConfirmingDelete = confirmDeleteUnitId === unit.id;
@@ -769,8 +375,8 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
           <div className="mb-2.5 flex items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-1.5">
               <span
-                style={{ backgroundColor: 'var(--bg-surface)' }}
-                className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10px] font-medium text-[var(--ink-2)]"
+                style={{ backgroundColor: statusFill, color: 'var(--on-pastel)' }}
+                className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium"
               >
                 <span
                   style={{ backgroundColor: statusColor }}
@@ -779,13 +385,8 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
                 {statusLabel}
               </span>
               <span
-                style={{
-                  backgroundColor: isActive
-                    ? 'var(--accent-soft)'
-                    : 'var(--bg-surface)',
-                  color: isActive ? 'var(--accent)' : 'var(--ink-2)',
-                }}
-                className="rounded-md px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.05em]"
+                style={toneChip(sectionTone)}
+                className="rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.05em]"
               >
                 {badge}
               </span>
@@ -994,10 +595,13 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
 
           <div
             style={{
-              backgroundColor: '#1B1A18',
-              color: '#EAE4DC',
+              backgroundColor: INSPECTOR.bg,
+              color: INSPECTOR.fg,
               boxShadow: '0 16px 34px -8px rgba(0, 0, 0, 0.35)',
               border: '1px solid rgba(255,255,255,0.1)',
+              ['--inspector-fg' as string]: INSPECTOR.fg,
+              ['--inspector-muted' as string]: INSPECTOR.muted,
+              ['--inspector-signal' as string]: INSPECTOR.signal,
             }}
             className="relative z-10 flex h-[228px] flex-col justify-between rounded-xl p-5 sm:h-[224px] sm:p-6"
           >
@@ -1006,13 +610,13 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
               className="flex h-full flex-col justify-between"
             >
               <div>
-                <div className="mb-2.5 flex items-center justify-between font-mono text-[11px] tracking-[0.06em] text-[#8F887F] [font-variant-numeric:tabular-nums]">
+                <div className="mb-2.5 flex items-center justify-between font-mono text-[11px] tracking-[0.06em] text-[var(--inspector-muted)] [font-variant-numeric:tabular-nums]">
                   <span>
                     {doc.kind === 'screenplay' ? 'SCENE' : 'SEC'}{' '}
                     {String(inspectedItem.index + 1).padStart(3, '0')} /{' '}
                     {String(enrichedUnits.length).padStart(3, '0')}
                   </span>
-                  <span className="uppercase text-[#D4845A]">
+                  <span className="uppercase text-[var(--inspector-signal)]">
                     {inspectedItem.badge}
                   </span>
                 </div>
@@ -1024,7 +628,7 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
                 )}
 
                 <div className="h-[68px] overflow-hidden">
-                  <p className="line-clamp-3 font-mono text-xs leading-relaxed text-[#EAE4DC]/90 sm:text-[13px]">
+                  <p className="line-clamp-3 font-mono text-xs leading-relaxed text-[var(--inspector-fg)]/90 sm:text-[13px]">
                     &ldquo;{inspectedItem.snippet}&rdquo;
                   </p>
                 </div>
@@ -1035,7 +639,7 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
                   <div className="truncate font-mono text-xs font-semibold uppercase tracking-[0.05em] text-white">
                     {inspectedItem.unit.title || inspectedItem.badge}
                   </div>
-                  <div className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.04em] text-[#8F887F] [font-variant-numeric:tabular-nums]">
+                  <div className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.04em] text-[var(--inspector-muted)] [font-variant-numeric:tabular-nums]">
                     {inspectedItem.metrics.words.toLocaleString()} WORDS · EST.{' '}
                     {inspectedItem.durationMinutes} MIN
                   </div>
@@ -1044,7 +648,7 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
                 <button
                   type="button"
                   onClick={() => onSelectUnitAndWrite(inspectedItem.unit.id)}
-                  style={{ backgroundColor: '#EAE4DC', color: '#141312' }}
+                  style={{ backgroundColor: INSPECTOR.butter, color: '#111111' }}
                   className="flex h-8 shrink-0 items-center gap-1 rounded-lg px-3.5 font-mono text-[11px] font-semibold uppercase tracking-[0.04em] transition-transform active:scale-95"
                 >
                   <span>OPEN {inspectedItem.badge.toUpperCase()}</span>
@@ -1061,11 +665,12 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
             const isInspected = item.unit.id === inspectedItem.unit.id;
             const widthPercent = Math.min(98, 90 + idx * 1.2);
             const tabLeft = tabOffsets[idx % tabOffsets.length];
+            const tone = toneVar(item.sectionTone);
             const folderBg = isInspected
-              ? 'var(--bg-elevated)'
-              : 'var(--bg-surface)';
+              ? tone
+              : `color-mix(in srgb, ${tone} 42%, var(--bg-surface))`;
             const borderColor = isInspected
-              ? 'var(--accent)'
+              ? 'var(--ink-1)'
               : 'var(--border-strong)';
 
             return (
@@ -1107,7 +712,7 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
                         opacity: isInspected ? 1 : 0,
                         pointerEvents: isInspected ? 'auto' : 'none',
                       }}
-                      className="font-mono text-[10px] font-semibold text-[var(--accent)] transition-opacity duration-150 hover:underline"
+                      className="rounded-full bg-[var(--ink-1)] px-2 py-0.5 font-mono text-[10px] font-semibold text-[var(--bg-canvas)] transition-opacity duration-150 hover:underline"
                     >
                       WRITE →
                     </button>
@@ -1136,15 +741,11 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
                       }}
                       className="relative z-10 inline-flex h-6 w-48 max-w-[230px] items-center gap-1.5 rounded-t-lg px-3.5"
                     >
-                      <span className="font-mono text-[10px] font-bold text-[var(--accent)]">
+                      <span className="font-mono text-[10px] font-bold text-[var(--on-pastel)] opacity-60">
                         {String(idx + 1).padStart(2, '0')}
                       </span>
                       <span
-                        style={{
-                          color: isInspected
-                            ? 'var(--accent)'
-                            : 'var(--ink-1)',
-                        }}
+                        style={{ color: 'var(--on-pastel)' }}
                         className="truncate font-mono text-[10px] font-semibold uppercase tracking-[0.05em]"
                       >
                         {item.unit.title.trim() ||
@@ -1165,8 +766,8 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
                     className="flex h-9 w-full items-center justify-between rounded-t-[4px] px-4"
                   >
                     <span
-                      style={{ opacity: isInspected ? 1 : 0.6 }}
-                      className="font-mono text-[10px] text-[var(--ink-3)]"
+                      style={{ opacity: isInspected ? 1 : 0.7 }}
+                      className="font-mono text-[10px] text-[var(--on-pastel)]"
                     >
                       {item.badge.toUpperCase()} · {item.metrics.words}W
                     </span>
@@ -1204,14 +805,24 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
   );
 
   return (
+    <>
+    {/* Pastel hero wash keyed to the work kind (sits behind the translucent top bar) */}
+    <div
+      aria-hidden="true"
+      style={{ background: toneWash(WORK_KIND_TONE[doc.kind]) }}
+      className="no-print pointer-events-none absolute inset-x-0 top-0 h-[440px]"
+    />
     <div
       ref={containerRef}
-      className="mx-auto max-w-5xl px-4 pb-28 pt-20 sm:px-10 sm:pt-24"
+      className="relative mx-auto max-w-5xl px-4 pb-28 pt-20 sm:px-10 sm:pt-24"
     >
       {/* Top Overview Header */}
-      <div className="mb-6 flex flex-col justify-between gap-6 border-b border-[var(--border-subtle)] pb-6 md:flex-row md:items-end">
+      <div className="mb-6 flex flex-col justify-between gap-6 border-b border-[var(--border-strong)] pb-6 md:flex-row md:items-end">
         <div className="flex-1">
-          <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.07em] text-[var(--accent)]">
+          <div
+            style={toneChip(WORK_KIND_TONE[doc.kind])}
+            className="mb-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.07em]"
+          >
             {doc.kind === 'book' ? (
               <>
                 <BookOpen className="size-3.5" />
@@ -1251,8 +862,11 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
         {/* Summary Metrics & Primary Add Actions */}
         <div className="flex flex-wrap items-center gap-2">
           <div
-            style={{ backgroundColor: 'var(--bg-surface)' }}
-            className="mr-1 flex items-center gap-3 rounded-xl px-3.5 py-2 text-xs text-[var(--ink-2)] [font-variant-numeric:tabular-nums]"
+            style={{
+              backgroundColor:
+                'color-mix(in srgb, var(--bg-elevated) 70%, transparent)',
+            }}
+            className="mr-1 flex items-center gap-3 rounded-full px-3.5 py-2 text-xs text-[var(--ink-2)] [font-variant-numeric:tabular-nums]"
           >
             <span>
               <strong className="font-semibold text-[var(--ink-1)]">
@@ -1463,7 +1077,11 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
                 }}
                 className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium transition-all duration-150"
               >
-                <Icon className="size-3.5 text-[var(--accent)]" />
+                <Icon
+                  className={`size-3.5 ${
+                    active ? 'text-[var(--accent)]' : ''
+                  }`}
+                />
                 <span>{tab.label}</span>
               </button>
             );
@@ -1483,97 +1101,36 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
         )}
       </div>
 
-      {/* Interactive Story Pacing & Rhythm Strip (Visible in Timeline Mode) */}
-      {layoutMode === 'timeline' && enrichedUnits.length > 0 && (
-        <div
-          style={{
-            backgroundColor: 'var(--bg-surface)',
-            border: '1px solid var(--border-subtle)',
-          }}
-          className="mb-8 rounded-2xl p-4"
-        >
-          <div className="mb-2 flex items-center justify-between text-[11px] font-medium text-[var(--ink-3)] [font-variant-numeric:tabular-nums]">
-            <span className="font-mono uppercase tracking-[0.06em]">
-              {doc.kind === 'screenplay'
-                ? 'Scene Pacing & Runtime Stripboard'
-                : 'Narrative Pacing & Chapter Rhythm'}
-            </span>
-            <span className="font-mono">
-              Est. Total: {totalDurationMinutes} min · Click segment to jump
-            </span>
-          </div>
-
-          {/* Proportional Segment Track */}
-          <div className="flex h-6 w-full gap-1 overflow-hidden rounded-lg bg-[var(--bg-canvas)] p-1">
-            {enrichedUnits.map((item) => {
-              const weight = Math.max(15, item.metrics.words);
-              const isCurrent = item.unit.id === activeUnitId;
-              return (
-                <button
-                  key={item.unit.id}
-                  type="button"
-                  onClick={() => scrollToTimelineUnit(item.unit.id)}
-                  title={`${item.badge}: ${
-                    item.unit.title || item.unit.slugline || 'Untitled'
-                  } (${item.metrics.words} words)`}
-                  style={{
-                    flexGrow: weight,
-                    backgroundColor: isCurrent
-                      ? 'var(--accent)'
-                      : 'var(--ink-3)',
-                    opacity: isCurrent ? 1 : 0.45,
-                  }}
-                  className="h-full min-w-[14px] rounded transition-opacity hover:opacity-90"
-                />
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* ==================================================================== */}
       {/* BODY: TIMELINE vs CARDS vs CABINET                                   */}
       {/* ==================================================================== */}
       {layoutMode === 'timeline' ? (
-        <div className="relative">
-          {enrichedUnits.map(renderTimelineNode)}
-
-          {/* Bottom Timeline Spine Terminus: Add Next Scene / Chapter */}
-          <div className="flex items-center gap-3 pt-2 sm:gap-5">
-            <div className="flex w-10 justify-center sm:w-28 sm:justify-end sm:pr-3">
-              <button
-                type="button"
-                onClick={() =>
-                  onAddUnit(
-                    doc.kind === 'screenplay' ? 'scene' : 'chapter',
-                    parts[parts.length - 1]?.id
-                  )
-                }
-                style={{
-                  backgroundColor: 'var(--bg-surface)',
-                  border: '1.5px dashed var(--border-strong)',
-                }}
-                className="flex size-8 items-center justify-center rounded-full text-[var(--ink-3)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                aria-label="Add next node on timeline"
-              >
-                <Plus className="size-3.5" />
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={() =>
-                onAddUnit(
-                  doc.kind === 'screenplay' ? 'scene' : 'chapter',
-                  parts[parts.length - 1]?.id
-                )
-              }
-              className="text-xs font-medium text-[var(--ink-3)] transition-colors hover:text-[var(--accent)]"
-            >
-              + Append {doc.kind === 'screenplay' ? 'Next Scene' : 'Next Chapter'}{' '}
-              to Timeline
-            </button>
-          </div>
-        </div>
+        <NarrativeTimeline
+          items={enrichedUnits.map((item) => ({
+            id: item.unit.id,
+            title:
+              item.unit.title.trim() ||
+              (doc.kind === 'screenplay'
+                ? item.unit.slugline || 'Untitled scene'
+                : item.badge),
+            badge: item.badge,
+            words: item.metrics.words,
+            durationMinutes: item.durationMinutes,
+            partId: hasParts ? item.unit.partId : undefined,
+            beats: item.beats,
+          }))}
+          parts={hasParts ? parts : []}
+          activeId={activeUnitId}
+          unitNoun={doc.kind === 'screenplay' ? 'scene' : 'chapter'}
+          totalMinutes={totalDurationMinutes}
+          onOpen={onSelectUnitAndWrite}
+          onAppend={() =>
+            onAddUnit(
+              doc.kind === 'screenplay' ? 'scene' : 'chapter',
+              parts[parts.length - 1]?.id
+            )
+          }
+        />
       ) : layoutMode === 'cabinet' ? (
         renderUnitCabinet()
       ) : hasParts ? (
@@ -1653,5 +1210,6 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
         </div>
       )}
     </div>
+    </>
   );
 };
