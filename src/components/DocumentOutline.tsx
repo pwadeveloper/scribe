@@ -8,7 +8,8 @@ export interface OutlineHeadingItem {
   id: string;
   text: string;
   sublabel?: string;
-  level: 0 | 1 | 2 | 3; // 0 = Title / Primary Unit, 1 = H1, 2 = H2, 3 = H3
+  kindTag?: 'unit' | 'slugline' | 'dialogue' | 'action' | 'transition' | 'heading';
+  level: 0 | 1 | 2 | 3; // 0 = Primary Unit / Title, 1 = H1, 2 = Slugline / H2, 3 = Dialogue / Action / H3
   element: HTMLElement | null;
   unitId?: string;
 }
@@ -24,6 +25,158 @@ interface DocumentOutlineProps {
   titleInputRef: React.RefObject<HTMLTextAreaElement | null>;
   sidebarOpen: boolean;
   isTyping: boolean;
+}
+
+/**
+ * Formats a unit's top-level label so screenplay scenes always lead with
+ * "Scene 1", "Scene 2", etc. (never repeating raw "INT. LOCATION - DAY" 20 times).
+ */
+function formatUnitPrimaryLabel(
+  unit: DocumentUnit,
+  units: DocumentUnit[],
+  workKind: WorkKind
+): string {
+  const badge = getUnitBadgeLabel(unit, units); // e.g. "Scene 4" or "Chapter 1"
+  const rawTitle = (unit.title || '').trim();
+
+  if (!rawTitle || rawTitle.toLowerCase() === badge.toLowerCase()) {
+    return badge;
+  }
+
+  if (workKind === 'screenplay') {
+    return `${badge} · ${rawTitle}`;
+  }
+
+  return `${badge}: ${rawTitle}`;
+}
+
+/**
+ * Extracts structured sub-items (INT./EXT. sluglines, dialogue exchanges,
+ * action beats, transitions, or markdown headings) from a root container
+ * (either the live editor DOM for the active scene or a temporary div for other scenes).
+ */
+function extractScreenplaySubsFromRoot(
+  root: HTMLElement,
+  unitId: string,
+  isLiveDom: boolean
+): OutlineHeadingItem[] {
+  const subs: OutlineHeadingItem[] = [];
+  const children = Array.from(root.children) as HTMLElement[];
+
+  // For non-live scenes, check if the scene only has the untouched default placeholder
+  if (!isLiveDom) {
+    const plain = (root.textContent || '').trim();
+    if (!plain || plain.toUpperCase() === 'INT. LOCATION - DAY') {
+      return [];
+    }
+  }
+
+  let lastActionAdded = false;
+
+  for (let i = 0; i < children.length; i++) {
+    const el = children[i];
+    const tag = el.tagName.toLowerCase();
+    const rawText = (el.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!rawText) continue;
+
+    const spType = el.getAttribute('data-sp-type');
+
+    // 1. Sluglines (INT. / EXT.), Sections, Act Breaks, Shots, or Markdown Headings -> Level 2 Sub
+    if (
+      spType === 'slugline' ||
+      spType === 'section' ||
+      spType === 'act-break' ||
+      spType === 'shot' ||
+      tag === 'h1' ||
+      tag === 'h2' ||
+      tag === 'h3' ||
+      /^(INT\.|EXT\.|INT\.\/EXT\.|I\/E\.)/i.test(rawText)
+    ) {
+      subs.push({
+        id: `outline-sp-slug-${unitId}-${i}`,
+        text: spType === 'section' ? rawText : rawText.toUpperCase(),
+        sublabel: spType === 'section' ? 'SECTION' : spType === 'shot' ? 'SHOT' : 'SLUG',
+        kindTag: 'slugline',
+        level: 2,
+        element: isLiveDom ? el : null,
+        unitId,
+      });
+      lastActionAdded = false;
+      continue;
+    }
+
+    // 2. Character + Dialogue exchange -> Level 3 Sub
+    if (spType === 'character') {
+      const charName = rawText.toUpperCase();
+      let dialogueSnippet = '';
+
+      // Look ahead for the dialogue line belonging to this character cue
+      const next1 = children[i + 1];
+      const next2 = children[i + 2];
+      if (next1) {
+        const next1Type = next1.getAttribute('data-sp-type');
+        if (next1Type === 'dialogue') {
+          dialogueSnippet = (next1.textContent || '').replace(/\s+/g, ' ').trim();
+        } else if (
+          next1Type === 'parenthetical' &&
+          next2 &&
+          next2.getAttribute('data-sp-type') === 'dialogue'
+        ) {
+          dialogueSnippet = (next2.textContent || '').replace(/\s+/g, ' ').trim();
+        }
+      }
+
+      const combinedText = dialogueSnippet
+        ? `${charName}: “${dialogueSnippet}”`
+        : charName;
+
+      subs.push({
+        id: `outline-sp-dlg-${unitId}-${i}`,
+        text: combinedText,
+        sublabel: 'DIALOGUE',
+        kindTag: 'dialogue',
+        level: 3,
+        element: isLiveDom ? el : null,
+        unitId,
+      });
+      lastActionAdded = false;
+      continue;
+    }
+
+    // 3. Transitions (CUT TO:, DISSOLVE TO:, etc.) -> Level 3 Sub
+    if (spType === 'transition') {
+      subs.push({
+        id: `outline-sp-trans-${unitId}-${i}`,
+        text: `→ ${rawText.toUpperCase()}`,
+        sublabel: 'CUT',
+        kindTag: 'transition',
+        level: 3,
+        element: isLiveDom ? el : null,
+        unitId,
+      });
+      lastActionAdded = false;
+      continue;
+    }
+
+    // 4. Action beats (include in live active scene, or first beat after each slugline/dialogue)
+    if (
+      (spType === 'action' || (!spType && tag === 'p')) &&
+      (isLiveDom ? !lastActionAdded || children.length <= 10 : !lastActionAdded)
+    ) {
+      subs.push({
+        id: `outline-sp-act-${unitId}-${i}`,
+        text: rawText,
+        sublabel: 'BEAT',
+        kindTag: 'action',
+        level: 3,
+        element: isLiveDom ? el : null,
+        unitId,
+      });
+      lastActionAdded = true;
+    }
+  }
+
+  return subs;
 }
 
 export const DocumentOutline: React.FC<DocumentOutlineProps> = ({
@@ -52,48 +205,86 @@ export const DocumentOutline: React.FC<DocumentOutlineProps> = ({
   const scanHeadings = useCallback(() => {
     const items: OutlineHeadingItem[] = [];
 
-    if ((workKind === 'book' || workKind === 'screenplay') && units && units.length > 0) {
+    if (
+      (workKind === 'book' || workKind === 'screenplay') &&
+      units &&
+      units.length > 0
+    ) {
       units.forEach((u) => {
         const isCurrentUnit = u.id === activeUnitId;
         const badge = getUnitBadgeLabel(u, units);
-        const labelText =
-          workKind === 'screenplay'
-            ? u.slugline || u.title || badge
-            : u.title
-            ? `${badge}: ${u.title}`
-            : badge;
+        const labelText = formatUnitPrimaryLabel(u, units, workKind);
 
+        // Top-level Scene or Chapter entry
         items.push({
           id: `outline-unit-${u.id}`,
           text: labelText,
           sublabel: badge,
+          kindTag: 'unit',
           level: 0,
           element: isCurrentUnit ? titleInputRef.current : null,
           unitId: u.id,
         });
 
-        if (isCurrentUnit && editorContainerRef.current && workKind === 'book') {
-          const nodes = editorContainerRef.current.querySelectorAll('h1, h2, h3');
-          nodes.forEach((node, idx) => {
-            const el = node as HTMLElement;
-            const rawText = (el.textContent || '').trim();
-            if (!rawText) return;
-            const tag = el.tagName.toLowerCase();
-            const level: 1 | 2 | 3 = tag === 'h1' ? 2 : tag === 'h2' ? 2 : 3;
-            items.push({
-              id: `outline-subheading-${u.id}-${idx}`,
-              text: rawText,
-              level,
-              element: el,
-              unitId: u.id,
+        if (workKind === 'screenplay') {
+          if (isCurrentUnit && editorContainerRef.current) {
+            const liveSubs = extractScreenplaySubsFromRoot(
+              editorContainerRef.current,
+              u.id,
+              true
+            );
+            items.push(...liveSubs);
+          } else if (u.contentHtml) {
+            const temp = document.createElement('div');
+            temp.innerHTML = u.contentHtml;
+            const storedSubs = extractScreenplaySubsFromRoot(temp, u.id, false);
+            items.push(...storedSubs);
+          }
+        } else if (workKind === 'book') {
+          if (isCurrentUnit && editorContainerRef.current) {
+            const nodes =
+              editorContainerRef.current.querySelectorAll('h1, h2, h3');
+            nodes.forEach((node, idx) => {
+              const el = node as HTMLElement;
+              const rawText = (el.textContent || '').trim();
+              if (!rawText) return;
+              const tag = el.tagName.toLowerCase();
+              const level: 1 | 2 | 3 = tag === 'h1' ? 2 : tag === 'h2' ? 2 : 3;
+              items.push({
+                id: `outline-subheading-${u.id}-${idx}`,
+                text: rawText,
+                kindTag: 'heading',
+                level,
+                element: el,
+                unitId: u.id,
+              });
             });
-          });
+          } else if (u.contentHtml) {
+            const temp = document.createElement('div');
+            temp.innerHTML = u.contentHtml;
+            const nodes = temp.querySelectorAll('h1, h2, h3');
+            nodes.forEach((node, idx) => {
+              const rawText = (node.textContent || '').trim();
+              if (!rawText) return;
+              const tag = node.tagName.toLowerCase();
+              const level: 1 | 2 | 3 = tag === 'h1' ? 2 : tag === 'h2' ? 2 : 3;
+              items.push({
+                id: `outline-subheading-${u.id}-${idx}`,
+                text: rawText,
+                kindTag: 'heading',
+                level,
+                element: null,
+                unitId: u.id,
+              });
+            });
+          }
         }
       });
     } else {
       items.push({
         id: 'outline-doc-title',
         text: docTitle.trim() || 'Untitled manuscript',
+        kindTag: 'unit',
         level: 0,
         element: titleInputRef.current,
       });
@@ -110,6 +301,7 @@ export const DocumentOutline: React.FC<DocumentOutlineProps> = ({
           items.push({
             id: `outline-heading-${idx}`,
             text: rawText,
+            kindTag: 'heading',
             level,
             element: el,
           });
@@ -118,7 +310,14 @@ export const DocumentOutline: React.FC<DocumentOutlineProps> = ({
     }
 
     setHeadings(items);
-  }, [workKind, units, activeUnitId, docTitle, editorContainerRef, titleInputRef]);
+  }, [
+    workKind,
+    units,
+    activeUnitId,
+    docTitle,
+    editorContainerRef,
+    titleInputRef,
+  ]);
 
   useEffect(() => {
     scanHeadings();
@@ -147,7 +346,30 @@ export const DocumentOutline: React.FC<DocumentOutlineProps> = ({
       );
       if (baseIdx === -1) baseIdx = 0;
 
-      const threshold = window.innerHeight * 0.32;
+      // If the user's cursor is inside a specific block in the editor, highlight its corresponding outline item
+      const editor = editorContainerRef.current;
+      const activeBlock = editor?.querySelector('.is-active-block');
+      if (activeBlock) {
+        let matchedIdx = -1;
+        for (let i = baseIdx + 1; i < headings.length; i++) {
+          const item = headings[i];
+          if (item.unitId !== activeUnitId) break;
+          if (
+            item.element === activeBlock ||
+            (item.element &&
+              activeBlock.compareDocumentPosition(item.element) &
+                Node.DOCUMENT_POSITION_PRECEDING)
+          ) {
+            matchedIdx = i;
+          }
+        }
+        if (matchedIdx !== -1) {
+          setActiveIndex(matchedIdx);
+          return;
+        }
+      }
+
+      const threshold = window.innerHeight * 0.35;
       let activeIdx = baseIdx;
 
       for (let i = baseIdx + 1; i < headings.length; i++) {
@@ -197,12 +419,18 @@ export const DocumentOutline: React.FC<DocumentOutlineProps> = ({
     }
 
     setActiveIndex(currentIdx);
-  }, [headings, workKind, activeUnitId]);
+  }, [headings, workKind, activeUnitId, editorContainerRef]);
 
   useEffect(() => {
     updateActiveFromScroll();
-    window.addEventListener('scroll', updateActiveFromScroll, { passive: true });
-    return () => window.removeEventListener('scroll', updateActiveFromScroll);
+    window.addEventListener('scroll', updateActiveFromScroll, {
+      passive: true,
+    });
+    document.addEventListener('selectionchange', updateActiveFromScroll);
+    return () => {
+      window.removeEventListener('scroll', updateActiveFromScroll);
+      document.removeEventListener('selectionchange', updateActiveFromScroll);
+    };
   }, [updateActiveFromScroll]);
 
   useEffect(() => {
@@ -265,7 +493,7 @@ export const DocumentOutline: React.FC<DocumentOutlineProps> = ({
           x: 0,
           opacity: 1,
           duration: 0.22,
-          stagger: 0.015,
+          stagger: 0.012,
           ease: 'power3.out',
           overwrite: 'auto',
         }
@@ -295,7 +523,7 @@ export const DocumentOutline: React.FC<DocumentOutlineProps> = ({
           scaleX: 1,
           opacity: 1,
           duration: 0.2,
-          stagger: 0.012,
+          stagger: 0.01,
           ease: 'power2.out',
           overwrite: 'auto',
         }
@@ -346,7 +574,7 @@ export const DocumentOutline: React.FC<DocumentOutlineProps> = ({
     }
 
     const rect = item.element.getBoundingClientRect();
-    const targetY = window.scrollY + rect.top - window.innerHeight * 0.2;
+    const targetY = window.scrollY + rect.top - window.innerHeight * 0.22;
 
     window.scrollTo({
       top: Math.max(0, targetY),
@@ -392,7 +620,7 @@ export const DocumentOutline: React.FC<DocumentOutlineProps> = ({
         zIndex: 'calc(var(--z-header) - 1)',
         left: 'max(0.375rem, env(safe-area-inset-left, 0px))',
       }}
-      className="no-print fixed top-[30vh] select-none md:!left-3 lg:!left-5"
+      className="no-print fixed top-[28vh] select-none md:!left-3 lg:!left-5"
     >
       <div className="relative flex items-start">
         {/* Resting State: Minimal Horizontal Tick Marks (tappable on mobile, hoverable on desktop) */}
@@ -402,14 +630,16 @@ export const DocumentOutline: React.FC<DocumentOutlineProps> = ({
           aria-label="Expand document outline"
           aria-expanded={isExpanded}
           onClick={() => setIsExpanded(true)}
-          className="flex min-h-11 min-w-9 flex-col justify-center gap-2.5 py-2 pr-3 text-start md:gap-3"
+          className="flex min-h-11 min-w-9 flex-col justify-center gap-2 py-2 pr-3 text-start md:gap-2.5"
         >
           {headings.map((item, idx) => {
             const isActive = idx === activeIndex;
+            const isCurrentUnitHeader =
+              item.level === 0 && item.unitId && item.unitId === activeUnitId;
             const widthPx = isActive
               ? 18
               : item.level === 0 || item.level === 1
-              ? 12
+              ? 13
               : item.level === 2
               ? 9
               : 6;
@@ -422,10 +652,15 @@ export const DocumentOutline: React.FC<DocumentOutlineProps> = ({
                 }}
                 style={{
                   width: `${widthPx}px`,
-                  height: '2px',
+                  height: isActive || isCurrentUnitHeader ? '2.5px' : '2px',
                   transformOrigin: 'left center',
-                  backgroundColor: isActive ? 'var(--accent)' : 'var(--ink-4)',
-                  opacity: isActive ? 1 : 0.65,
+                  backgroundColor:
+                    isActive || isCurrentUnitHeader
+                      ? 'var(--accent)'
+                      : item.level === 0
+                      ? 'var(--ink-3)'
+                      : 'var(--ink-4)',
+                  opacity: isActive ? 1 : isCurrentUnitHeader ? 0.85 : 0.55,
                 }}
                 className="block rounded-full transition-[width,background-color,opacity] duration-200 ease-out"
               />
@@ -441,15 +676,18 @@ export const DocumentOutline: React.FC<DocumentOutlineProps> = ({
             opacity: 0,
             visibility: 'hidden',
             pointerEvents: 'none',
-            backgroundColor: 'color-mix(in srgb, var(--bg-elevated) 95%, transparent)',
+            backgroundColor:
+              'color-mix(in srgb, var(--bg-elevated) 96%, transparent)',
             boxShadow: 'var(--elevation-floating)',
           }}
-          className="vellum-scroller absolute left-0 top-0 -my-1.5 flex max-h-[58dvh] w-52 flex-col gap-0.5 overflow-y-auto rounded-2xl p-2.5 backdrop-blur-md md:bg-[color-mix(in_srgb,var(--bg-canvas)_92%,transparent)] md:shadow-none"
+          className="vellum-scroller absolute left-0 top-0 -my-1.5 flex max-h-[62dvh] w-60 flex-col gap-0.5 overflow-y-auto rounded-2xl p-2.5 backdrop-blur-md"
         >
           {headings.map((item, idx) => {
             const isActive = idx === activeIndex;
             const isHovered = idx === hoveredIndex;
-            const highlighted = isActive || isHovered;
+            const isCurrentUnitHeader =
+              item.level === 0 && item.unitId && item.unitId === activeUnitId;
+            const highlighted = isActive || isHovered || isCurrentUnitHeader;
 
             return (
               <button
@@ -463,27 +701,47 @@ export const DocumentOutline: React.FC<DocumentOutlineProps> = ({
                 onMouseLeave={(e) => handleItemHoverLeave(e.currentTarget)}
                 onClick={() => handleJumpToHeading(item, idx)}
                 style={{
-                  color: highlighted
-                    ? 'var(--accent)'
-                    : item.level === 0 || item.level === 1
-                    ? 'var(--ink-2)'
-                    : 'var(--ink-3)',
+                  color:
+                    isActive || isHovered
+                      ? 'var(--accent)'
+                      : isCurrentUnitHeader
+                      ? 'var(--ink-1)'
+                      : item.level === 0 || item.level === 1
+                      ? 'var(--ink-2)'
+                      : 'var(--ink-3)',
+                  backgroundColor: isActive
+                    ? 'color-mix(in srgb, var(--accent) 10%, transparent)'
+                    : 'transparent',
                   paddingInlineStart:
                     item.level === 2
-                      ? '0.45rem'
+                      ? '0.65rem'
                       : item.level === 3
-                      ? '0.85rem'
-                      : '0rem',
+                      ? '1.25rem'
+                      : '0.35rem',
                 }}
-                className={`block w-full truncate rounded-lg py-1.5 text-start font-sans text-xs transition-colors duration-150 md:py-0.5 ${
+                className={`flex w-full items-center gap-1.5 rounded-lg py-1.5 pr-2 text-start transition-colors duration-150 md:py-1 ${
                   item.level === 0 || item.level === 1
-                    ? 'font-semibold tracking-[-0.01em]'
+                    ? 'font-sans text-xs font-semibold tracking-[-0.01em]'
+                    : item.kindTag === 'slugline'
+                    ? 'font-mono text-[10.5px] font-semibold uppercase tracking-[0.02em]'
                     : item.level === 2
-                    ? 'font-medium text-[11.5px]'
-                    : 'font-normal text-[11px]'
+                    ? 'font-sans text-[11.5px] font-medium'
+                    : 'font-sans text-[11px] font-normal'
                 }`}
               >
-                {item.text}
+                {item.level >= 2 && (
+                  <span
+                    style={{
+                      backgroundColor: highlighted
+                        ? 'var(--accent)'
+                        : 'var(--border-strong)',
+                    }}
+                    className={`shrink-0 rounded-full ${
+                      item.level === 2 ? 'size-1.5' : 'h-px w-2'
+                    }`}
+                  />
+                )}
+                <span className="truncate">{item.text}</span>
               </button>
             );
           })}
