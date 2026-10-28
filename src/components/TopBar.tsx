@@ -35,6 +35,7 @@ import {
 } from '../types';
 import { gsapButtonHover, gsapRowHover, prefersReducedMotion } from '../motion';
 import { WORK_KIND_TONE, toneChip } from '../palette';
+import { guideShortcut } from '../screenplay';
 
 interface TopBarProps {
   isTyping: boolean;
@@ -58,6 +59,8 @@ interface TopBarProps {
   onOpenShortcuts: () => void;
   screenplayGuideOpen?: boolean;
   onToggleScreenplayGuide?: () => void;
+  /** Screenplays: open the paginated export (PDF / HTML) dialog. */
+  onOpenScreenplayExport?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -82,6 +85,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenShortcuts,
   screenplayGuideOpen = false,
   onToggleScreenplayGuide,
+  onOpenScreenplayExport,
 }) => {
   const [openMenu, setOpenMenu] = useState<'appearance' | 'export' | null>(null);
   const [copiedType, setCopiedType] = useState<'md' | 'txt' | null>(null);
@@ -279,8 +283,8 @@ export const TopBar: React.FC<TopBarProps> = ({
             onClick={onToggleScreenplayGuide}
             {...btnHover}
             aria-pressed={screenplayGuideOpen}
-            aria-label="Screenplay elements guide (⌘?)"
-            title="Screenplay elements & shortcuts (⌘?)"
+            aria-label={`Screenplay elements guide (${guideShortcut()})`}
+            title={`Screenplay elements & shortcuts (${guideShortcut()} or F1)`}
             style={{
               backgroundColor: screenplayGuideOpen
                 ? 'var(--ink-1)'
@@ -808,31 +812,35 @@ export const TopBar: React.FC<TopBarProps> = ({
             <button
               type="button"
               onClick={() => {
-                onExportHtml();
                 setOpenMenu(null);
+                if (onOpenScreenplayExport) onOpenScreenplayExport();
+                else onExportHtml();
               }}
               {...rowHover}
               className="flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-start font-medium text-[var(--ink-1)] transition-colors duration-150 ease-out hover:bg-[var(--bg-subtle-hover)]"
             >
               <span className="flex items-center gap-2">
                 <FileCode className="size-3.5 text-[var(--ink-2)]" />
-                HTML document (.html)
+                {onOpenScreenplayExport ? 'Screenplay pages (.html)…' : 'HTML document (.html)'}
               </span>
             </button>
             <button
               type="button"
               onClick={() => {
                 setOpenMenu(null);
-                window.print();
+                if (onOpenScreenplayExport) onOpenScreenplayExport();
+                else window.print();
               }}
               {...rowHover}
               className="flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-start font-medium text-[var(--ink-1)] transition-colors duration-150 ease-out hover:bg-[var(--bg-subtle-hover)]"
             >
               <span className="flex items-center gap-2">
                 <Printer className="size-3.5 text-[var(--ink-2)]" />
-                Print / Save PDF
+                {onOpenScreenplayExport ? 'Print / Save PDF…' : 'Print / Save PDF'}
               </span>
-              <span className="text-[11px] text-[var(--ink-3)]">⌘P</span>
+              {!onOpenScreenplayExport && (
+                <span className="text-[11px] text-[var(--ink-3)]">⌘P</span>
+              )}
             </button>
           </div>
         )}

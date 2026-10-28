@@ -41,6 +41,68 @@ export interface DocumentUnit {
   updatedAt: number;
 }
 
+/**
+ * Title page fields (Fountain keys). The title itself is the document title.
+ * Title, Credit, Author and Source are centered; Contact and Draft date sit
+ * lower left; Notes and Copyright lower right.
+ */
+export interface TitlePage {
+  /** TV: the episode title, shown in quotes under the series title. */
+  episode?: string;
+  /** Byline wording, e.g. "Written by", "Screenplay by", "Teleplay by". */
+  credit?: string;
+  author?: string;
+  /** Source material, e.g. "Based on the novel by Daniel Wallace". */
+  source?: string;
+  draftDate?: string;
+  contact?: string;
+  notes?: string;
+  copyright?: string;
+}
+
+/** Standard production revision colors, in issue order. */
+export type RevisionColor =
+  | 'White'
+  | 'Blue'
+  | 'Pink'
+  | 'Yellow'
+  | 'Green'
+  | 'Goldenrod'
+  | 'Buff'
+  | 'Salmon'
+  | 'Cherry'
+  | 'Tan';
+
+/**
+ * A locked draft to compare against. Each unit stores the "type|text"
+ * signature of its printed lines; anything not in the snapshot is revised.
+ */
+export interface RevisionBaseline {
+  lockedAt: number;
+  color: RevisionColor;
+  units: Record<string, string[]>;
+}
+
+/** Page-level options for the paginated screenplay export. */
+export interface ScreenplayExportSettings {
+  /** Top-left header. Tokens: {title} {date} {revision} {page}. */
+  header?: string;
+  /** Centered footer. Same tokens as the header. */
+  footer?: string;
+  /** Page numbers top right ("2."); the first script page is unnumbered. */
+  pageNumbers?: boolean;
+  /** Scene numbers in both margins (shooting scripts). */
+  sceneNumbers?: boolean;
+  /** (MORE) and NAME (CONT'D) when a speech breaks across pages. */
+  moreContd?: boolean;
+  /** (CONT'D) when a character speaks again after an action line. */
+  autoContd?: boolean;
+  /** Asterisks beside lines changed since the locked draft. */
+  revisionMarks?: boolean;
+  /** Print the title page first. */
+  titlePage?: boolean;
+}
+
 export interface DocumentItem {
   id: string;
   kind: WorkKind;
@@ -48,6 +110,12 @@ export interface DocumentItem {
   subtitle?: string;
   pinned?: boolean;
   wordGoal?: number;
+  /** Screenplay title page (first printed page) */
+  titlePage?: TitlePage;
+  /** Screenplay export options (pages, numbers, revisions) */
+  screenplayExport?: ScreenplayExportSettings;
+  /** Locked draft used for revision marks */
+  revisionBaseline?: RevisionBaseline;
   /** Used directly for 'essay' mode (and fallback summary) */
   contentHtml: string;
   /** Optional parts (for books) or acts (for screenplays) */

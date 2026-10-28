@@ -33,8 +33,11 @@ import {
   SPEECH_BLOCKS,
   blockByDigit,
   blockSpec,
-  isTimeOfDay,
   isMacPlatform,
+  isVocabValue,
+  opensForTyping,
+  parseSceneHeading,
+  formatSceneHeading,
 } from '../screenplay';
 import { gsapButtonHover, prefersReducedMotion } from '../motion';
 
@@ -67,6 +70,7 @@ interface RichEditorProps {
   screenplayGuideOpen?: boolean;
   onCloseScreenplayGuide?: () => void;
   onToggleScreenplayGuide?: () => void;
+  onOpenTitlePage?: () => void;
 }
 
 export const RichEditor: React.FC<RichEditorProps> = ({
@@ -98,6 +102,7 @@ export const RichEditor: React.FC<RichEditorProps> = ({
   screenplayGuideOpen = false,
   onCloseScreenplayGuide,
   onToggleScreenplayGuide,
+  onOpenTitlePage,
 }) => {
   const mainRef = useRef<HTMLElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -167,7 +172,11 @@ export const RichEditor: React.FC<RichEditorProps> = ({
           : '<p><br></p>';
       el.innerHTML = initialHtml || defaultHtml;
       setLiveHtml(el.innerHTML);
-      if (workKind === 'screenplay') syncDualLayout();
+      // Always re-sync: this also clears dual-dialogue offsets left over from
+      // a screenplay when switching to a book or essay
+      syncDualLayout();
+      // The old caret pointed into replaced content
+      savedRangeRef.current = null;
       const text = (el.textContent || '').trim();
       setIsEmpty(text.length === 0);
       setSelectionRect((prev) => ({ ...prev, visible: false }));
@@ -222,7 +231,34 @@ export const RichEditor: React.FC<RichEditorProps> = ({
     }
     const styleEl = dualStyleRef.current;
     const children = Array.from(editor.children) as HTMLElement[];
-    if (!children.some((c) => c.hasAttribute('data-dual'))) {
+    const isScreenplay = editor.getAttribute('data-work-kind') === 'screenplay';
+
+    // Drop orphaned markers: a left column must be followed directly by a
+    // right column (and vice versa), otherwise neither side is dual any more
+    if (isScreenplay) {
+      let k = 0;
+      while (k < children.length) {
+        const side = children[k].getAttribute('data-dual');
+        if (!side) {
+          k += 1;
+          continue;
+        }
+        const run: HTMLElement[] = [];
+        while (k < children.length && children[k].getAttribute('data-dual') === side) {
+          run.push(children[k]);
+          k += 1;
+        }
+        const pairedAfter =
+          side === '1' && children[k]?.getAttribute('data-dual') === '2';
+        const before = children[k - run.length - 1];
+        const pairedBefore = side === '2' && before?.getAttribute('data-dual') === '1';
+        if (!pairedAfter && !pairedBefore) {
+          run.forEach((el) => el.removeAttribute('data-dual'));
+        }
+      }
+    }
+
+    if (!isScreenplay || !children.some((c) => c.hasAttribute('data-dual'))) {
       if (styleEl.textContent) styleEl.textContent = '';
       return;
     }
@@ -256,11 +292,11 @@ export const RichEditor: React.FC<RichEditorProps> = ({
       const reclaim = Math.max(0, Math.min(rightBottom - leftBottom, lift));
       right.forEach((idx) => {
         rules.push(
-          `.vellum-editor > :nth-child(${idx + 1}){position:relative !important;top:-${lift.toFixed(1)}px !important}`
+          `.vellum-editor[data-work-kind="screenplay"] > :nth-child(${idx + 1}){position:relative !important;top:-${lift.toFixed(1)}px !important}`
         );
       });
       rules.push(
-        `.vellum-editor > :nth-child(${right[right.length - 1] + 1}){margin-block-end:-${reclaim.toFixed(1)}px !important}`
+        `.vellum-editor[data-work-kind="screenplay"] > :nth-child(${right[right.length - 1] + 1}){margin-block-end:-${reclaim.toFixed(1)}px !important}`
       );
     }
     styleEl.textContent = rules.join('\n');
@@ -276,9 +312,17 @@ export const RichEditor: React.FC<RichEditorProps> = ({
       frame = requestAnimationFrame(syncDualLayout);
     });
     observer.observe(editor);
+    // Printing lays the page out at a different width: re-measure for print
+    // and again when returning to the screen
+    const printQuery = window.matchMedia('print');
+    const handlePrintChange = () => syncDualLayout();
+    printQuery.addEventListener('change', handlePrintChange);
+    window.addEventListener('afterprint', handlePrintChange);
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
+      printQuery.removeEventListener('change', handlePrintChange);
+      window.removeEventListener('afterprint', handlePrintChange);
     };
   }, [workKind, syncDualLayout]);
 
@@ -364,7 +408,8 @@ export const RichEditor: React.FC<RichEditorProps> = ({
               knownLocations,
             });
             setSpSuggestions(suggestions);
-            setSpSelectedIndex(0);
+            // Nothing pre-selected: Enter keeps its normal meaning
+            setSpSelectedIndex(-1);
             if (suggestions.length > 0) {
               const caretRect = range.getBoundingClientRect();
               const blockRect = activeBlock.getBoundingClientRect();
@@ -551,11 +596,42 @@ export const RichEditor: React.FC<RichEditorProps> = ({
     return group;
   };
 
+  /** Empty for flow purposes: no text, or a parenthetical that is just "()". */
+  const isBlankLine = (el: Element) => {
+    const text = (el.textContent || '').trim();
+    return (
+      text === '' || (spTypeOf(el) === 'parenthetical' && /^\(\s*\)?$/.test(text))
+    );
+  };
+
+  /** Caret sits before any text in the block. */
+  const caretAtBlockStart = (block: HTMLElement) => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return false;
+    const probe = document.createRange();
+    probe.setStart(block, 0);
+    probe.setEnd(sel.getRangeAt(0).startContainer, sel.getRangeAt(0).startOffset);
+    return probe.toString().length === 0;
+  };
+
+  const rememberCaret = () => {
+    const editor = editorRef.current;
+    const sel = window.getSelection();
+    if (!editor || !sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    if (editor.contains(range.commonAncestorContainer)) {
+      savedRangeRef.current = range.cloneRange();
+    }
+  };
+
   const commitScreenplayEdit = useCallback(
     (focusBlock: HTMLElement | null) => {
       if (focusBlock) setActiveSpBlockType(spTypeOf(focusBlock));
       setSpSuggestions([]);
       setSpPopoverPos(null);
+      // selectionchange is async; record the new caret now so a guide close
+      // in the same tick does not restore the pre-edit position
+      rememberCaret();
       emitHtmlChange();
       updateFocusAndToolbar(true, false);
     },
@@ -573,17 +649,14 @@ export const RichEditor: React.FC<RichEditorProps> = ({
     if (saved && editor.contains(saved.commonAncestorContainer)) {
       sel.removeAllRanges();
       sel.addRange(saved);
-    } else if (
-      sel.rangeCount === 0 ||
-      !editor.contains(sel.getRangeAt(0).commonAncestorContainer)
-    ) {
-      const last = editor.lastElementChild as HTMLElement | null;
-      if (last) placeCaret(last, 'end');
     }
-    return (
-      getTopLevelBlock(sel.focusNode) ||
-      (editor.lastElementChild as HTMLElement | null)
-    );
+    // The selection must end up inside a real line (not the editor root)
+    let block = sel.rangeCount > 0 ? getTopLevelBlock(sel.focusNode) : null;
+    if (!block) {
+      block = editor.lastElementChild as HTMLElement | null;
+      if (block) placeCaret(block, 'end');
+    }
+    return block;
   }, [getTopLevelBlock]);
 
   // Apply a Screenplay block type to the currently focused paragraph
@@ -592,23 +665,36 @@ export const RichEditor: React.FC<RichEditorProps> = ({
       const editor = editorRef.current;
       const sel = window.getSelection();
       if (!editor || !sel) return;
-      editor.focus();
-      const block = getTopLevelBlock(sel.focusNode);
+      // When focus is elsewhere (guide, title field), go back to the writer's
+      // caret first; a bare focus() would put it at the top of the scene
+      const block =
+        document.activeElement === editor && sel.rangeCount > 0
+          ? getTopLevelBlock(sel.focusNode)
+          : focusEditorAtSavedCaret();
       if (!block) return;
 
-      // A page break is its own element: a rule, followed by a fresh action line
+      // A page break is its own element: a rule plus a line to keep writing on
       if (newType === 'page-break') {
         const rule = document.createElement('hr');
         rule.setAttribute('data-sp-type', 'page-break');
-        const next = makeSpBlock('action');
         if (isBlankBlock(block)) {
+          const next = makeSpBlock('action');
           block.replaceWith(rule);
+          rule.insertAdjacentElement('afterend', next);
+          placeCaret(next, 'start');
+          commitScreenplayEdit(next);
+        } else if (caretAtBlockStart(block)) {
+          // At the start of a line: break before it, keep the caret on its text
+          block.insertAdjacentElement('beforebegin', rule);
+          placeCaret(block, 'start');
+          commitScreenplayEdit(block);
         } else {
+          const next = makeSpBlock('action');
           block.insertAdjacentElement('afterend', rule);
+          rule.insertAdjacentElement('afterend', next);
+          placeCaret(next, 'start');
+          commitScreenplayEdit(next);
         }
-        rule.insertAdjacentElement('afterend', next);
-        placeCaret(next, 'start');
-        commitScreenplayEdit(next);
         return;
       }
 
@@ -623,34 +709,39 @@ export const RichEditor: React.FC<RichEditorProps> = ({
       }
       const updatedBlock = getTopLevelBlock(window.getSelection()?.focusNode || null);
       if (updatedBlock) {
+        const previousType = spTypeOf(updatedBlock);
         updatedBlock.setAttribute('data-sp-type', newType);
         // Dual dialogue only applies to speech lines
         if (!SPEECH_BLOCKS.includes(newType)) {
           updatedBlock.removeAttribute('data-dual');
         }
-        if (
-          newType === 'parenthetical' &&
-          !(updatedBlock.textContent || '').trim().startsWith('(')
-        ) {
-          const existing = (updatedBlock.textContent || '').trim();
-          updatedBlock.textContent = `(${existing})`;
-          // Place caret inside parentheses
-          const textNode = updatedBlock.firstChild;
-          if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+        const text = (updatedBlock.textContent || '').trim();
+        if (newType === 'parenthetical' && !text.startsWith('(')) {
+          if (text === '') {
+            updatedBlock.textContent = '()';
             const r = document.createRange();
-            r.setStart(textNode, Math.max(1, (textNode.textContent || '').length - 1));
+            r.setStart(updatedBlock.firstChild!, 1);
             r.collapse(true);
             sel.removeAllRanges();
             sel.addRange(r);
+          } else {
+            // Wrap the existing content so line breaks and formatting survive
+            updatedBlock.insertBefore(document.createTextNode('('), updatedBlock.firstChild);
+            updatedBlock.appendChild(document.createTextNode(')'));
           }
+        } else if (previousType === 'parenthetical' && /^\(\s*\)$/.test(text)) {
+          // Leaving an untouched "()" behind: clear it
+          updatedBlock.innerHTML = '<br>';
+          placeCaret(updatedBlock, 'start');
         }
       }
       setActiveSpBlockType(newType);
+      rememberCaret();
       emitHtmlChange();
       updateFocusAndToolbar(false, true);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [getTopLevelBlock, emitHtmlChange, updateFocusAndToolbar, commitScreenplayEdit]
+    [getTopLevelBlock, emitHtmlChange, updateFocusAndToolbar, commitScreenplayEdit, focusEditorAtSavedCaret]
   );
 
   /**
@@ -666,15 +757,26 @@ export const RichEditor: React.FC<RichEditorProps> = ({
 
       // Reuse the current line when it is empty, otherwise open one after it
       const lineFor = (type: ScreenplayBlockType) => {
-        if (isBlankBlock(block)) {
+        if (block.tagName === 'P' && isBlankLine(block)) {
           block.setAttribute('data-sp-type', type);
-          block.removeAttribute('data-dual');
+          if (!SPEECH_BLOCKS.includes(type)) block.removeAttribute('data-dual');
           return block;
         }
         const p = makeSpBlock(type);
+        if (block.hasAttribute('data-dual') && SPEECH_BLOCKS.includes(type)) {
+          p.setAttribute('data-dual', block.getAttribute('data-dual')!);
+        }
         block.insertAdjacentElement('afterend', p);
         return p;
       };
+
+      const sceneHeading = () =>
+        spTypeOf(block) === 'slugline'
+          ? block
+          : findPrevBlock(block, 'slugline') ??
+            (spTypeOf(editorRef.current?.firstElementChild ?? null) === 'slugline'
+              ? (editorRef.current!.firstElementChild as HTMLElement)
+              : null);
 
       switch (item.mode) {
         case 'heading-prefix': {
@@ -692,42 +794,18 @@ export const RichEditor: React.FC<RichEditorProps> = ({
           return;
         }
 
-        case 'heading-time': {
-          let heading =
-            spTypeOf(block) === 'slugline'
-              ? block
-              : findPrevBlock(block, 'slugline') ??
-                (spTypeOf(editorRef.current?.firstElementChild ?? null) === 'slugline'
-                  ? (editorRef.current!.firstElementChild as HTMLElement)
-                  : null);
-          if (!heading) {
-            heading = lineFor('slugline');
-          }
-          const current = (heading.textContent || '').trim();
-          const dash = current.lastIndexOf(' - ');
-          const tail = dash >= 0 ? current.slice(dash + 3) : '';
-          const base = dash >= 0 && isTimeOfDay(tail) ? current.slice(0, dash) : current;
-          setBlockText(heading, `${base || 'INT. LOCATION'} - ${item.value}`);
-          placeCaret(heading, 'end');
-          commitScreenplayEdit(heading);
-          return;
-        }
-
+        case 'heading-time':
         case 'heading-append': {
-          const heading =
-            spTypeOf(block) === 'slugline' ? block : findPrevBlock(block, 'slugline');
-          if (!heading) {
-            const el = lineFor('slugline');
-            setBlockText(el, `INT. LOCATION - DAY ${item.value}`);
-            placeCaret(el, 'end');
-            commitScreenplayEdit(el);
-            return;
+          const heading = sceneHeading() ?? lineFor('slugline');
+          const parts = parseSceneHeading((heading.textContent || '').trim());
+          if (item.mode === 'heading-time') {
+            parts.time = item.value;
+          } else if (parts.tags.includes(item.value)) {
+            parts.tags = parts.tags.filter((t) => t !== item.value);
+          } else {
+            parts.tags = [...parts.tags, item.value];
           }
-          const current = (heading.textContent || '').trim();
-          const next = current.includes(item.value)
-            ? current.replace(item.value, '').replace(/\s{2,}/g, ' ').trim()
-            : `${current} ${item.value}`;
-          setBlockText(heading, next);
+          setBlockText(heading, formatSceneHeading(parts));
           placeCaret(heading, 'end');
           commitScreenplayEdit(heading);
           return;
@@ -768,9 +846,6 @@ export const RichEditor: React.FC<RichEditorProps> = ({
           }
           const paren = lineFor('parenthetical');
           setBlockText(paren, item.value);
-          if (block.hasAttribute('data-dual') && paren !== block) {
-            paren.setAttribute('data-dual', block.getAttribute('data-dual')!);
-          }
           // Continue the speech: jump into the following dialogue line
           let dialogue = paren.nextElementSibling as HTMLElement | null;
           if (!dialogue || spTypeOf(dialogue) !== 'dialogue') {
@@ -779,20 +854,22 @@ export const RichEditor: React.FC<RichEditorProps> = ({
               dialogue.setAttribute('data-dual', paren.getAttribute('data-dual')!);
             }
             paren.insertAdjacentElement('afterend', dialogue);
-            placeCaret(dialogue, 'start');
-          } else {
-            placeCaret(dialogue, 'start');
           }
+          placeCaret(dialogue, 'start');
           commitScreenplayEdit(dialogue);
           return;
         }
 
         case 'line':
         default: {
-          const sameKind = spTypeOf(block) === item.block && !SPEECH_BLOCKS.includes(item.block);
-          const el = sameKind ? block : lineFor(item.block);
-          const opensForTyping = /[:\-]$/.test(item.value);
-          setBlockText(el, opensForTyping ? `${item.value}${NBSP}` : item.value);
+          // Swap in place only when the line already holds a standard value of
+          // the same kind (CUT TO: → DISSOLVE TO:); never overwrite prose
+          const swap =
+            spTypeOf(block) === item.block &&
+            !SPEECH_BLOCKS.includes(item.block) &&
+            isVocabValue(text, item.block);
+          const el = swap ? block : lineFor(item.block);
+          setBlockText(el, opensForTyping(item) ? `${item.value}${NBSP}` : item.value);
           placeCaret(el, 'end');
           commitScreenplayEdit(el);
         }
@@ -845,6 +922,18 @@ export const RichEditor: React.FC<RichEditorProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [getTopLevelBlock, commitScreenplayEdit]
   );
+
+  // However the guide closes (Esc, X, shortcut, toolbar), focus left inside it
+  // would fall to <body>; send it back to the writer's caret instead
+  const guideWasOpenRef = useRef(screenplayGuideOpen);
+  useEffect(() => {
+    const wasOpen = guideWasOpenRef.current;
+    guideWasOpenRef.current = screenplayGuideOpen;
+    if (wasOpen && !screenplayGuideOpen) {
+      const active = document.activeElement;
+      if (!active || active === document.body) focusEditorAtSavedCaret();
+    }
+  }, [screenplayGuideOpen, focusEditorAtSavedCaret]);
 
   // Guide entry points: put the caret back first, then run the command
   const guideApplyBlock = useCallback(
@@ -930,9 +1019,14 @@ export const RichEditor: React.FC<RichEditorProps> = ({
 
   // Handle Live Markdown Shortcuts, Screenplay Flow, & Keyboard Formatting
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    // Keys that confirm IME composition (Japanese, Chinese, Korean…) belong
+    // to the input method, not to screenplay commands
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     const isMod = e.metaKey || e.ctrlKey;
 
-    // 1. If Screenplay Autocomplete Popover is open, handle ArrowDown/Up, Tab/Enter, Escape
+    // 1. Autocomplete: nothing is pre-selected, so Enter keeps its normal
+    // meaning (next element) unless the writer arrowed to a suggestion;
+    // Tab accepts the highlighted or top suggestion (Final Draft SmartType)
     if (workKind === 'screenplay' && spSuggestions.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
@@ -941,18 +1035,21 @@ export const RichEditor: React.FC<RichEditorProps> = ({
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setSpSelectedIndex(
-          (prev) => (prev - 1 + spSuggestions.length) % spSuggestions.length
+        setSpSelectedIndex((prev) =>
+          prev <= 0 ? spSuggestions.length - 1 : prev - 1
         );
         return;
       }
-      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
-        const chosen = spSuggestions[spSelectedIndex] || spSuggestions[0];
-        if (chosen) {
-          e.preventDefault();
-          handleAcceptSuggestion(chosen);
-          return;
-        }
+      const chosen =
+        e.key === 'Tab' && !e.shiftKey
+          ? spSuggestions[Math.max(0, spSelectedIndex)]
+          : e.key === 'Enter' && !e.shiftKey && spSelectedIndex >= 0
+          ? spSuggestions[spSelectedIndex]
+          : undefined;
+      if (chosen) {
+        e.preventDefault();
+        handleAcceptSuggestion(chosen);
+        return;
       }
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -963,39 +1060,61 @@ export const RichEditor: React.FC<RichEditorProps> = ({
 
     // 2. Screenplay element shortcuts, Tab & Enter flow
     if (workKind === 'screenplay') {
-      // ⌘⌥1–9 switch elements (plain ⌘1–9 belong to the browser's tabs);
-      // ⌘⌥D toggles dual dialogue. Skip AltGr-produced characters on Windows.
-      if (isMod && e.altKey && !e.shiftKey) {
-        const altGrChar =
-          !isMacPlatform() && e.key.length === 1 && !/[0-9a-z]/i.test(e.key);
+      const mac = isMacPlatform();
+      // On Windows, AltGr arrives as Ctrl+Alt: let characters and dead keys
+      // it produces through instead of treating them as shortcuts
+      const altGrInput =
+        !mac &&
+        (e.key === 'Dead' ||
+          (e.key.length === 1 && !/[0-9a-z]/i.test(e.key)) ||
+          e.nativeEvent.getModifierState?.('AltGraph'));
+
+      // ⌘⌥0–9 / Ctrl+Alt+0–9 switch elements (plain ⌘1–9 switch browser tabs)
+      if (isMod && e.altKey && !e.shiftKey && !altGrInput) {
         const digit = /^Digit([0-9])$/.exec(e.code)?.[1];
-        if (digit !== undefined && !altGrChar) {
-          const spec = blockByDigit(Number(digit));
-          if (spec) {
-            e.preventDefault();
-            applyScreenplayBlockType(spec.id);
-            return;
-          }
-        }
-        if (e.code === 'KeyD' && !altGrChar) {
+        const spec = digit !== undefined ? blockByDigit(Number(digit)) : undefined;
+        if (spec) {
           e.preventDefault();
-          toggleDualDialogue();
+          applyScreenplayBlockType(spec.id);
           return;
         }
+      }
+
+      // Dual dialogue: ⌘⇧D on Mac (⌘⌥D hides the Dock), Ctrl+Alt+D on Windows
+      if (
+        e.code === 'KeyD' &&
+        (mac ? e.metaKey && e.shiftKey && !e.altKey : e.ctrlKey && e.altKey && !altGrInput)
+      ) {
+        e.preventDefault();
+        toggleDualDialogue();
+        return;
       }
 
       if (e.key === 'Tab' && !isMod) {
         e.preventDefault();
         const sel = window.getSelection();
         const block = getTopLevelBlock(sel?.focusNode || null);
-        const isBlockEmpty = (block?.textContent || '').trim().length === 0;
+        const isBlockEmpty = !block || isBlankLine(block);
         const spec = blockSpec(activeSpBlockType);
         const next = e.shiftKey
           ? spec.shiftTab
           : isBlockEmpty
           ? spec.tabEmpty ?? spec.tab
           : spec.tab;
-        if (next) applyScreenplayBlockType(next);
+        if (!next) return;
+        // Empty lines and Action convert in place (Final Draft); a finished
+        // cue, line of dialogue, heading, etc. opens the next element below it
+        if (isBlockEmpty || e.shiftKey || activeSpBlockType === 'action' || !block) {
+          applyScreenplayBlockType(next);
+          return;
+        }
+        const newLine = makeSpBlock(next);
+        if (block.hasAttribute('data-dual') && SPEECH_BLOCKS.includes(next)) {
+          newLine.setAttribute('data-dual', block.getAttribute('data-dual')!);
+        }
+        block.insertAdjacentElement('afterend', newLine);
+        placeCaret(newLine, 'start');
+        applyScreenplayBlockType(next);
         return;
       }
 
@@ -1003,66 +1122,129 @@ export const RichEditor: React.FC<RichEditorProps> = ({
       // naturally follows (Scene Heading → Action, Character → Dialogue, ...)
       if (e.key === 'Enter' && !e.shiftKey && !isMod) {
         const sel = window.getSelection();
-        const block = getTopLevelBlock(sel?.focusNode || null);
+        let block = getTopLevelBlock(sel?.focusNode || null);
         if (block && editorRef.current && sel && sel.rangeCount > 0) {
           e.preventDefault();
+          // A selection is replaced, like any text field
+          if (!sel.isCollapsed) {
+            document.execCommand('delete');
+            block = getTopLevelBlock(sel.focusNode) ?? block;
+          }
           let currentType = spTypeOf(block);
-          const rawText = (block.textContent || '').trim();
 
-          // An empty non-action line + Enter steps back out to Action
-          if (rawText === '' && block.tagName === 'P') {
+          // An empty non-action line (or an untouched "()") steps back out
+          if (block.tagName === 'P' && isBlankLine(block)) {
             const fallback = blockSpec(currentType).emptyEnter;
             if (fallback && fallback !== currentType) {
+              if ((block.textContent || '').trim() !== '') block.innerHTML = '<br>';
               block.setAttribute('data-sp-type', fallback);
-              block.removeAttribute('data-dual');
+              if (!SPEECH_BLOCKS.includes(fallback)) block.removeAttribute('data-dual');
+              placeCaret(block, 'start');
               commitScreenplayEdit(block);
               return;
             }
           }
 
-          // Fountain conventions, resolved when the line is finished
-          if (currentType === 'action' || currentType === 'general') {
-            const centered = /^>\s*(.+?)\s*<$/.exec(rawText);
-            if (centered) {
-              setBlockText(block, centered[1]);
+          const range = sel.getRangeAt(0);
+          const afterCaret = (() => {
+            const probe = document.createRange();
+            probe.setStart(range.startContainer, range.startOffset);
+            probe.setEnd(block, block.childNodes.length);
+            return probe.toString();
+          })();
+          const atStart = caretAtBlockStart(block) && afterCaret.trim() !== '';
+          // Enter inside "(quietly|)" jumps to dialogue instead of splitting ")"
+          const keepTail =
+            currentType === 'parenthetical' && /^\)?\s*$/.test(afterCaret);
+          const atEnd = keepTail || afterCaret.trim() === '';
+
+          if (atStart) {
+            // Open a line above; the text and its element stay put
+            document.execCommand('insertParagraph');
+            const kept = getTopLevelBlock(sel.focusNode);
+            const above = kept?.previousElementSibling as HTMLElement | null;
+            if (above && kept) {
+              above.setAttribute('data-sp-type', 'action');
+              above.removeAttribute('data-dual');
+              if ((above.textContent || '') === '') above.innerHTML = '<br>';
+              placeCaret(kept, 'start');
+            }
+            commitScreenplayEdit(kept ?? block);
+            return;
+          }
+
+          if (atEnd) {
+            // Fountain conventions, resolved when the line is finished
+            const rawText = (block.textContent || '').trim();
+            if (currentType === 'action' || currentType === 'general') {
+              const centered = /^>\s*(.+?)\s*<$/.exec(rawText);
+              if (centered) {
+                setBlockText(block, centered[1]);
+                block.setAttribute('data-sp-type', 'centered');
+                currentType = 'centered';
+              } else if (
+                rawText.length > 3 &&
+                rawText === rawText.toUpperCase() &&
+                /TO:$/.test(rawText)
+              ) {
+                block.setAttribute('data-sp-type', 'transition');
+                currentType = 'transition';
+              }
+            }
+            // "> THE END <": the "> " trigger made it a transition; the
+            // closing "<" means it was centered text all along
+            if (currentType === 'transition' && /<$/.test(rawText)) {
+              setBlockText(block, rawText.replace(/^>\s*/, '').replace(/\s*<$/, ''));
               block.setAttribute('data-sp-type', 'centered');
               currentType = 'centered';
-            } else if (
-              rawText.length > 3 &&
-              rawText === rawText.toUpperCase() &&
-              /TO:$/.test(rawText)
-            ) {
-              block.setAttribute('data-sp-type', 'transition');
-              currentType = 'transition';
             }
-          }
-          if (currentType === 'character' && rawText.endsWith('^')) {
-            setBlockText(block, rawText.slice(0, -1).trim());
-            toggleDualDialogue(block);
+            if (currentType === 'character' && rawText.endsWith('^')) {
+              setBlockText(block, rawText.slice(0, -1).trim());
+              toggleDualDialogue(block);
+            }
+
+            const nextType = blockSpec(currentType).enter;
+            const side = block.getAttribute('data-dual');
+            if (side && !SPEECH_BLOCKS.includes(nextType)) {
+              // Leaving dual dialogue: continue after the whole pair, never
+              // between its two columns
+              let anchor: Element = block;
+              while (anchor.nextElementSibling?.hasAttribute('data-dual')) {
+                anchor = anchor.nextElementSibling;
+              }
+              const newP = makeSpBlock(nextType);
+              anchor.insertAdjacentElement('afterend', newP);
+              placeCaret(newP, 'start');
+              commitScreenplayEdit(newP);
+              return;
+            }
+            // A native paragraph split keeps Enter on the browser's undo stack.
+            // The caret goes to the end first: rewriting the line above (^,
+            // centered) or a trailing ")" would otherwise split it wrongly
+            placeCaret(block, 'end');
+            document.execCommand('insertParagraph');
+            const newP = getTopLevelBlock(sel.focusNode);
+            if (newP && newP !== block) {
+              newP.setAttribute('data-sp-type', nextType);
+              newP.classList.remove('is-active-block', 'is-adjacent-block');
+              if (!side || !SPEECH_BLOCKS.includes(nextType)) newP.removeAttribute('data-dual');
+              if ((newP.textContent || '') === '') {
+                newP.innerHTML = '<br>';
+                placeCaret(newP, 'start');
+              }
+            }
+            commitScreenplayEdit(newP ?? block);
+            return;
           }
 
-          const nextType = blockSpec(currentType).enter;
-          const newP = makeSpBlock(nextType);
-          if (block.hasAttribute('data-dual') && SPEECH_BLOCKS.includes(nextType)) {
-            newP.setAttribute('data-dual', block.getAttribute('data-dual')!);
+          // Mid-line: a native split (undoable); both halves keep the element
+          document.execCommand('insertParagraph');
+          const tail = getTopLevelBlock(sel.focusNode);
+          if (tail) {
+            tail.setAttribute('data-sp-type', currentType);
+            tail.classList.remove('is-active-block', 'is-adjacent-block');
           }
-
-          // Carry any text after the caret onto the new line
-          const range = sel.getRangeAt(0);
-          if (block.contains(range.startContainer) && block.tagName === 'P') {
-            const tail = document.createRange();
-            tail.setStart(range.startContainer, range.startOffset);
-            tail.setEnd(block, block.childNodes.length);
-            const fragment = tail.extractContents();
-            if ((fragment.textContent || '').length > 0) {
-              newP.innerHTML = '';
-              newP.appendChild(fragment);
-            }
-            if ((block.textContent || '').length === 0) block.innerHTML = '<br>';
-          }
-          block.insertAdjacentElement('afterend', newP);
-          placeCaret(newP, 'start');
-          commitScreenplayEdit(newP);
+          commitScreenplayEdit(tail ?? block);
           return;
         }
       }
@@ -1083,6 +1265,11 @@ export const RichEditor: React.FC<RichEditorProps> = ({
       if (key === 'e') {
         e.preventDefault();
         executeCommand('inlineCode');
+        return;
+      }
+      if (key === 'u') {
+        e.preventDefault();
+        executeCommand('underline');
         return;
       }
       if (e.shiftKey && key === 'x') {
@@ -1113,6 +1300,15 @@ export const RichEditor: React.FC<RichEditorProps> = ({
       }
     }
 
+    // A leading space on an empty screenplay line is never meaningful
+    if (workKind === 'screenplay' && e.key === ' ' && !isMod) {
+      const block = getTopLevelBlock(window.getSelection()?.focusNode || null);
+      if (block && (block.textContent || '') === '') {
+        e.preventDefault();
+        return;
+      }
+    }
+
     // Live Markdown Prefix Triggers on Space
     if (e.key === ' ' && !isMod) {
       const sel = window.getSelection();
@@ -1136,6 +1332,10 @@ export const RichEditor: React.FC<RichEditorProps> = ({
               }
               block.setAttribute('data-sp-type', triggerType);
               if (!SPEECH_BLOCKS.includes(triggerType)) block.removeAttribute('data-dual');
+              // Keep the caret on this line: an emptied text node would let the
+              // browser drop it into the previous block
+              if ((block.textContent || '') === '') block.innerHTML = '<br>';
+              placeCaret(block, 'start');
               setActiveSpBlockType(triggerType);
               emitHtmlChange();
               updateFocusAndToolbar(true, true);
@@ -1157,7 +1357,9 @@ export const RichEditor: React.FC<RichEditorProps> = ({
             },
           };
 
-          const action = triggers[beforeCaret];
+          // Lists, quotes and rules are for books and essays; in a screenplay
+          // "- " or "1. " is just text
+          const action = workKind === 'screenplay' ? undefined : triggers[beforeCaret];
           if (action) {
             e.preventDefault();
             textNode.textContent = (textNode.textContent || '').slice(sel.focusOffset);
@@ -1202,22 +1404,29 @@ export const RichEditor: React.FC<RichEditorProps> = ({
     if (workKind === 'screenplay') {
       const sel = window.getSelection();
       const block = getTopLevelBlock(sel?.focusNode || null);
+      // Only plain lines are re-detected; an element the writer chose
+      // (Cast list, Character, Centered…) keeps its type
+      const type = block ? spTypeOf(block) : 'action';
+      const plainLine = type === 'action' || type === 'general';
       if (block && block.tagName.toLowerCase() === 'p') {
         const text = (block.textContent || '').trimStart();
-        if (text.startsWith('(') && block.getAttribute('data-sp-type') !== 'parenthetical') {
+        if (text === '(' && (plainLine || type === 'dialogue')) {
           block.setAttribute('data-sp-type', 'parenthetical');
           setActiveSpBlockType('parenthetical');
-        } else if (
-          text.startsWith('@') &&
-          block.getAttribute('data-sp-type') !== 'character'
-        ) {
+        } else if (text.startsWith('@') && plainLine) {
           block.setAttribute('data-sp-type', 'character');
-          block.textContent = text.slice(1);
+          // Remove the "@" from its text node directly; the live selection
+          // shifts with it, so the caret stays where the writer is typing
+          const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+          const first = walker.nextNode() as Text | null;
+          const at = first ? first.data.indexOf('@') : -1;
+          if (first && at >= 0) first.deleteData(at, 1);
+          if ((block.textContent || '') === '') {
+            block.innerHTML = '<br>';
+            placeCaret(block, 'start');
+          }
           setActiveSpBlockType('character');
-        } else if (
-          /^(INT\.|EXT\.|INT\.\/EXT\.|I\/E\.)/i.test(text) &&
-          block.getAttribute('data-sp-type') !== 'slugline'
-        ) {
+        } else if (plainLine && /^(INT\.|EXT\.|INT\.\/EXT\.|EXT\.\/INT\.|I\/E\.|EST\.)/i.test(text)) {
           block.setAttribute('data-sp-type', 'slugline');
           setActiveSpBlockType('slugline');
         }
@@ -1313,17 +1522,16 @@ export const RichEditor: React.FC<RichEditorProps> = ({
             activeBlockType={activeSpBlockType}
             onSelectBlockType={applyScreenplayBlockType}
             onOpenGuide={onToggleScreenplayGuide}
+            guideOpen={screenplayGuideOpen}
           />
           <ScreenplayGuide
             open={screenplayGuideOpen}
             activeBlock={activeSpBlockType}
-            onClose={() => {
-              onCloseScreenplayGuide?.();
-              focusEditorAtSavedCaret();
-            }}
+            onClose={() => onCloseScreenplayGuide?.()}
             onApplyBlock={guideApplyBlock}
             onInsertVocab={insertScreenplayVocab}
             onToggleDual={guideToggleDual}
+            onOpenTitlePage={onOpenTitlePage}
           />
         </>
       )}

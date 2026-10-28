@@ -14,6 +14,7 @@ import {
   ScreenplayBlockType,
   SCREENPLAY_BLOCKS,
   blockSpec,
+  guideShortcut,
   modKeys,
   vocabValues,
 } from '../screenplay';
@@ -194,8 +195,11 @@ export function computeScreenplaySuggestions(params: {
       }));
     }
 
+    // Suggest only once the writer starts typing, so Tab/Enter on an empty
+    // cue keep their element-flow meaning
+    if (!cleanQuery) return [];
     const matchingChars = knownCharacters
-      .filter((c) => !cleanQuery || (c.startsWith(cleanQuery) && c !== cleanQuery))
+      .filter((c) => c.startsWith(cleanQuery) && c !== cleanQuery)
       .slice(0, 5);
 
     const results: AutocompleteSuggestion[] = matchingChars.map((c) => ({
@@ -206,32 +210,14 @@ export function computeScreenplaySuggestions(params: {
       targetBlockType: 'character',
     }));
 
-    // Also offer (V.O.) and (O.S.) if user typed a complete character name
-    if (cleanQuery.length >= 2) {
-      results.push(
-        {
-          id: `char-vo-${cleanQuery}`,
-          label: `${cleanQuery} (V.O.)`,
-          insertText: `${cleanQuery} (V.O.)`,
-          category: 'Voice Over',
-          targetBlockType: 'character',
-        },
-        {
-          id: `char-os-${cleanQuery}`,
-          label: `${cleanQuery} (O.S.)`,
-          insertText: `${cleanQuery} (O.S.)`,
-          category: 'Off Screen',
-          targetBlockType: 'character',
-        }
-      );
-    }
-
+    // Extensions are offered once the writer types "(" after the name
     return results.slice(0, 6);
   }
 
   // 3. Parenthetical delivery notes
   if (blockType === 'parenthetical') {
     const q = trimmed.replace(/^\(/, '').replace(/\)$/, '').toLowerCase();
+    if (!q) return [];
     return PARENTHETICALS.filter(
       (p) => p.label.slice(1).startsWith(q) && p.label.toLowerCase() !== trimmed.toLowerCase()
     )
@@ -247,9 +233,8 @@ export function computeScreenplaySuggestions(params: {
 
   // 4. Shot headings
   if (blockType === 'shot') {
-    return SHOTS.filter(
-      (t) => !upper || (t.label.startsWith(upper) && t.label !== upper)
-    )
+    if (!upper) return [];
+    return SHOTS.filter((t) => t.label.startsWith(upper) && t.label !== upper)
       .slice(0, 6)
       .map((t) => ({
         id: `shot-${t.label}`,
@@ -265,9 +250,8 @@ export function computeScreenplaySuggestions(params: {
     blockType === 'transition' ||
     /^(CUT|DISS|FADE|SMASH|MATCH|JUMP|FLASH|WIPE|IRIS|TIME CUT|INTERCUT)\b/i.test(trimmed)
   ) {
-    return TRANSITIONS.filter(
-      (t) => !upper || (t.label.startsWith(upper) && t.label !== upper)
-    )
+    if (!upper) return [];
+    return TRANSITIONS.filter((t) => t.label.startsWith(upper) && t.label !== upper)
       .slice(0, 6)
       .map((t) => ({
         id: `trans-${t.label}`,
@@ -316,14 +300,15 @@ export const ScreenplayAutocompletePopover: React.FC<
         left: `${Math.min(window.innerWidth - 268, Math.max(12, position.left))}px`,
         backgroundColor: 'var(--bg-elevated)',
         boxShadow: 'var(--elevation-floating)',
-        zIndex: 'var(--z-toolbar)',
+        // Above the guide panel, which shares the toolbar layer
+        zIndex: 'calc(var(--z-toolbar) + 10)',
       }}
       onMouseDown={(e) => e.preventDefault()}
       className="no-print fixed w-[min(16rem,calc(100vw-24px))] overflow-hidden rounded-xl p-1 text-xs"
     >
       <div className="flex items-center justify-between px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.06em] text-[var(--ink-3)]">
-        <span>Screenplay Autocomplete</span>
-        <span>Tab / ↵</span>
+        <span>Suggestions</span>
+        <span>Tab to accept · ↑↓</span>
       </div>
       {suggestions.map((s, idx) => {
         const active = idx === selectedIndex;
@@ -355,6 +340,7 @@ interface ScreenplayElementBarProps {
   activeBlockType: ScreenplayBlockType;
   onSelectBlockType: (type: ScreenplayBlockType) => void;
   onOpenGuide?: () => void;
+  guideOpen?: boolean;
 }
 
 const CORE_ELEMENTS: {
@@ -373,6 +359,7 @@ export const ScreenplayElementBar: React.FC<ScreenplayElementBarProps> = ({
   activeBlockType,
   onSelectBlockType,
   onOpenGuide,
+  guideOpen = false,
 }) => {
   const btnHover = gsapButtonHover({ hoverScale: 1.04, hoverY: -0.5, pressScale: 0.96 });
   const { mod, alt } = modKeys();
@@ -427,6 +414,21 @@ export const ScreenplayElementBar: React.FC<ScreenplayElementBarProps> = ({
         </span>
       )}
 
+      {/* What Enter and Tab will start next (Final Draft's status-bar hint) */}
+      <span
+        aria-hidden="true"
+        className="hidden shrink-0 items-center gap-2 whitespace-nowrap px-2 text-[11px] text-[var(--ink-3)] lg:flex"
+      >
+        <span>
+          ↵ <span className="text-[var(--ink-2)]">{blockSpec(activeSpec.enter).short}</span>
+        </span>
+        {activeSpec.tab && (
+          <span>
+            Tab <span className="text-[var(--ink-2)]">{blockSpec(activeSpec.tab).short}</span>
+          </span>
+        )}
+      </span>
+
       {onOpenGuide && (
         <>
           <span
@@ -437,7 +439,8 @@ export const ScreenplayElementBar: React.FC<ScreenplayElementBarProps> = ({
             type="button"
             onClick={onOpenGuide}
             {...btnHover}
-            title={`All elements & shortcuts (${mod}?)`}
+            aria-expanded={guideOpen}
+            title={`All elements & shortcuts (${guideShortcut()} or F1)`}
             className="flex h-8 shrink-0 items-center gap-1 rounded-full px-2.5 text-[11px] font-medium text-[var(--ink-2)] transition-[color,background-color] duration-150 hover:bg-[var(--bg-subtle-hover)] sm:h-7"
           >
             <MoreHorizontal className="size-3.5" strokeWidth={1.9} />

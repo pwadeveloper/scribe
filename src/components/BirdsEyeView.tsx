@@ -22,6 +22,8 @@ import {
   Sun,
   Moon,
   Sunrise,
+  FileText,
+  Check,
 } from 'lucide-react';
 import {
   BirdsEyeLayoutMode,
@@ -55,6 +57,8 @@ interface BirdsEyeViewProps {
   onSelectUnitAndWrite: (unitId: string) => void;
   onUpdateDocTitle: (title: string) => void;
   onUpdateDocSubtitle: (subtitle: string) => void;
+  /** Screenplays: open the title page editor. */
+  onOpenTitlePage?: () => void;
   onAddUnit: (
     unitKind: BookSectionKind | 'scene',
     partId?: string,
@@ -150,6 +154,7 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
   onSelectUnitAndWrite,
   onUpdateDocTitle,
   onUpdateDocSubtitle,
+  onOpenTitlePage,
   onAddUnit,
   onUpdateUnitMeta,
   onMoveUnit,
@@ -1016,6 +1021,30 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
               </button>
             </>
           ) : (
+            <>
+            {onOpenTitlePage && (
+              <button
+                type="button"
+                onClick={onOpenTitlePage}
+                {...btnHover}
+                style={{
+                  backgroundColor: 'var(--bg-elevated)',
+                  boxShadow: 'var(--elevation-raised)',
+                }}
+                title="Edit the title page: title, credit, author, contact"
+                className="flex h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-medium text-[var(--ink-1)]"
+              >
+                <FileText className="size-3.5 text-[var(--ink-2)]" />
+                <span>Title page</span>
+                {doc.titlePage?.author?.trim() && (
+                  <Check
+                    aria-label="filled in"
+                    className="size-3 text-[var(--good)]"
+                    strokeWidth={2.5}
+                  />
+                )}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => onAddUnit('scene')}
@@ -1029,6 +1058,7 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
               <Plus className="size-3.5" strokeWidth={2} />
               New Scene
             </button>
+            </>
           )}
         </div>
       </div>

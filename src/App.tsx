@@ -24,16 +24,15 @@ import {
   computeDocumentTotalMetrics,
   documentToFullMarkdown,
   downloadFile,
-  extractPlainText,
   extractScreenplayCharacters,
   extractScreenplayLocations,
   getUnitBadgeLabel,
   escapeHtml,
-  prepareScreenplayHtmlForExport,
   slugifyFilename,
-  titlePageToHtml,
 } from './editorUtils';
 import { TitlePageDialog } from './components/TitlePageDialog';
+import { ScreenplayExportDialog } from './components/ScreenplayExportDialog';
+import { renderScreenplayHtml, snapshotSignatures } from './screenplayExport';
 import { TopBar } from './components/TopBar';
 import { SidebarDrawer } from './components/SidebarDrawer';
 import { RichEditor } from './components/RichEditor';
@@ -58,6 +57,9 @@ export const App: React.FC = () => {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [screenplayGuideOpen, setScreenplayGuideOpen] = useState(false);
   const [titlePageOpen, setTitlePageOpen] = useState(false);
+  const closeTitlePage = useCallback(() => setTitlePageOpen(false), []);
+  const [screenplayExportOpen, setScreenplayExportOpen] = useState(false);
+  const closeScreenplayExport = useCallback(() => setScreenplayExportOpen(false), []);
   const [isTyping, setIsTyping] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
 
@@ -149,6 +151,14 @@ export const App: React.FC = () => {
       }, 280);
     });
   }, []);
+
+  // The guide lives in the screenplay editor: close it whenever that editor
+  // is not on screen, so it never reopens unexpectedly later
+  useEffect(() => {
+    if (viewMode !== 'write' || activeDoc.kind !== 'screenplay') {
+      setScreenplayGuideOpen(false);
+    }
+  }, [viewMode, activeDoc.kind]);
 
   // Update active document helper
   const updateActiveDocument = useCallback(
@@ -554,6 +564,8 @@ export const App: React.FC = () => {
   // Global keyboard shortcuts
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // The editor already handled it (e.g. ⌘⇧D dual dialogue)
+      if (e.defaultPrevented || e.isComposing) return;
       if (e.key === 'Escape') {
         setIsTyping(false);
         if (sidebarOpen) setSidebarOpen(false);
@@ -561,7 +573,22 @@ export const App: React.FC = () => {
       }
 
       const isMod = e.metaKey || e.ctrlKey;
-      // ⌘⌥ combinations belong to the editor (screenplay element shortcuts)
+
+      // Screenplay guide: ⌘⌥/ (Ctrl+Alt+/ on Windows) or F1. ⌘? is taken by
+      // the macOS Help menu, so it never reaches the page.
+      const guideKey =
+        e.key === 'F1' || (isMod && e.altKey && !e.shiftKey && e.code === 'Slash');
+      if (guideKey) {
+        if (activeDoc.kind === 'screenplay') {
+          e.preventDefault();
+          setViewMode('write');
+          setScreenplayGuideOpen((v) => !v);
+          setIsTyping(false);
+        }
+        return;
+      }
+
+      // Other ⌘⌥ combinations belong to the editor (element shortcuts)
       if (!isMod || e.altKey) return;
 
       const key = e.key.toLowerCase();
@@ -579,7 +606,7 @@ export const App: React.FC = () => {
           setViewMode((v) => (v === 'cabinet' ? 'write' : 'cabinet'));
           setIsTyping(false);
         }
-      } else if (key === 'd') {
+      } else if (key === 'd' && !e.shiftKey) {
         e.preventDefault();
         const order: FocusMode[] = ['off', 'paragraph', 'deep'];
         const next = order[(order.indexOf(settings.focusMode) + 1) % order.length];
@@ -591,14 +618,6 @@ export const App: React.FC = () => {
         e.preventDefault();
         setSidebarOpen((v) => !v);
         setIsTyping(false);
-      } else if (e.key === '?' || (e.shiftKey && e.key === '/')) {
-        // ⌘⇧/ (⌘?) opens the screenplay elements guide
-        if (activeDoc.kind === 'screenplay') {
-          e.preventDefault();
-          setViewMode('write');
-          setScreenplayGuideOpen((v) => !v);
-          setIsTyping(false);
-        }
       } else if (e.key === '/') {
         e.preventDefault();
         setShortcutsOpen((v) => !v);
@@ -635,8 +654,9 @@ export const App: React.FC = () => {
   };
 
   const handleExportText = () => {
-    const md = documentToFullMarkdown(activeDoc);
-    const body = extractPlainText(md);
+    // The Markdown/Fountain text is already plain text; parsing it as HTML
+    // would drop anything that looks like a tag (and could run markup)
+    const body = documentToFullMarkdown(activeDoc).trim();
     downloadFile(
       `${slugifyFilename(activeDoc.title)}.txt`,
       `${body}\n`,
@@ -645,23 +665,26 @@ export const App: React.FC = () => {
   };
 
   const handleExportHtml = () => {
+    // Screenplays export as paginated, industry-formatted pages
+    if (activeDoc.kind === 'screenplay') {
+      downloadFile(
+        `${slugifyFilename(activeDoc.title)}.html`,
+        renderScreenplayHtml(activeDoc).html,
+        'text/html;charset=utf-8'
+      );
+      return;
+    }
     const docTitle = escapeHtml(activeDoc.title.trim() || 'Untitled Manuscript');
-    const opening =
-      activeDoc.kind === 'screenplay'
-        ? titlePageToHtml(activeDoc)
-        : `<h1>${docTitle}</h1>`;
+    const opening = `<h1>${docTitle}</h1>`;
     const combinedBody =
       activeDoc.kind === 'essay' || !activeDoc.units
         ? activeDoc.contentHtml
         : activeDoc.units
             .map((u) => {
               const badge = getUnitBadgeLabel(u, activeDoc.units || []);
-              const body =
-                activeDoc.kind === 'screenplay'
-                  ? prepareScreenplayHtmlForExport(u.contentHtml)
-                  : u.contentHtml;
-              return `<section><h2>${badge}${
-                u.title ? ` — ${u.title}` : ''
+              const body = u.contentHtml;
+              return `<section><h2>${escapeHtml(badge)}${
+                u.title ? ` — ${escapeHtml(u.title)}` : ''
               }</h2>${body}</section>`;
             })
             .join('<hr />');
@@ -685,29 +708,6 @@ export const App: React.FC = () => {
     h1 { font-size: 2.2rem; line-height: 1.15; margin-bottom: 1.5rem; }
     h2 { font-size: 1.5rem; margin-top: 2.5rem; }
     blockquote { border-left: 2px solid #FF4B36; padding-left: 1rem; font-style: italic; color: #524B44; margin-left: 0; }
-    p[data-sp-type="slugline"] { font-weight: bold; text-transform: uppercase; margin-top: 2rem; }
-    p[data-sp-type="character"] { font-weight: bold; text-transform: uppercase; margin-left: 30%; margin-bottom: 0; }
-    p[data-sp-type="parenthetical"] { font-style: italic; margin-left: 24%; margin-top: 0; margin-bottom: 0; }
-    p[data-sp-type="dialogue"] { margin-left: 15%; margin-right: 15%; margin-top: 0.15rem; }
-    p[data-sp-type="transition"] { text-align: right; font-weight: bold; text-transform: uppercase; }
-    p[data-sp-type="shot"] { font-weight: bold; text-transform: uppercase; margin-top: 1.5rem; }
-    p[data-sp-type="centered"] { text-align: center; text-transform: uppercase; }
-    p[data-sp-type="cast-list"] { text-transform: uppercase; margin-top: 0.25rem; }
-    p[data-sp-type="act-break"] { text-align: center; text-transform: uppercase; text-decoration: underline; font-weight: bold; margin-top: 2.5rem; }
-    p[data-sp-type="lyrics"] { font-style: italic; margin-left: 15%; margin-right: 15%; margin-top: 0.15rem; }
-    hr[data-sp-type="page-break"] { break-after: page; border: none; border-top: 1px dashed #ccc; }
-    .dual-dialogue { display: grid; grid-template-columns: 1fr 1fr; column-gap: 4%; }
-    .dual-dialogue p[data-sp-type="character"] { margin-left: 18%; }
-    .dual-dialogue p[data-sp-type="parenthetical"] { margin-left: 10%; }
-    .dual-dialogue p[data-sp-type="dialogue"], .dual-dialogue p[data-sp-type="lyrics"] { margin-left: 0; margin-right: 2%; }
-    .title-page { display: flex; flex-direction: column; min-height: 80vh; padding-top: 22vh; font-family: 'Courier Prime', 'Courier New', Courier, monospace; break-after: page; }
-    .title-page p { margin: 0 0 1rem; }
-    .title-page-center { text-align: center; }
-    .title-page-title { font-weight: bold; text-transform: uppercase; text-decoration: underline; margin-bottom: 2rem !important; }
-    .title-page-source { margin-top: 2rem !important; }
-    .title-page-footer { margin-top: auto; display: flex; justify-content: space-between; gap: 2rem; font-size: 0.9rem; }
-    .title-page-right { text-align: right; }
-    @media print { .title-page { min-height: 9in; padding-top: 3in; } body { background: #fff; } }
   </style>
 </head>
 <body>
@@ -774,6 +774,9 @@ export const App: React.FC = () => {
         onCopyMarkdown={handleCopyMarkdown}
         onCopyPlainText={handleCopyPlainText}
         onOpenShortcuts={() => setShortcutsOpen(true)}
+        onOpenScreenplayExport={
+          activeDoc.kind === 'screenplay' ? () => setScreenplayExportOpen(true) : undefined
+        }
         screenplayGuideOpen={screenplayGuideOpen}
         onToggleScreenplayGuide={() => {
           setViewMode('write');
@@ -893,10 +896,37 @@ export const App: React.FC = () => {
       />
 
       {activeDoc.kind === 'screenplay' && (
+        <ScreenplayExportDialog
+          open={screenplayExportOpen}
+          doc={activeDoc}
+          onClose={closeScreenplayExport}
+          onChangeSettings={(patch) =>
+            updateActiveDocument((d) => ({
+              ...d,
+              screenplayExport: { ...d.screenplayExport, ...patch },
+            }))
+          }
+          onLockDraft={(color) =>
+            updateActiveDocument((d) => ({
+              ...d,
+              revisionBaseline: {
+                lockedAt: Date.now(),
+                color,
+                units: snapshotSignatures(d),
+              },
+              // A freshly locked draft has nothing to mark yet; keep marks on
+              screenplayExport: { ...d.screenplayExport, revisionMarks: true },
+            }))
+          }
+          onDownload={handleExportHtml}
+        />
+      )}
+
+      {activeDoc.kind === 'screenplay' && (
         <TitlePageDialog
           open={titlePageOpen}
           doc={activeDoc}
-          onClose={() => setTitlePageOpen(false)}
+          onClose={closeTitlePage}
           onChangeTitle={(title) => updateActiveDocument((d) => ({ ...d, title }))}
           onChangeTitlePage={(patch) =>
             updateActiveDocument((d) => ({

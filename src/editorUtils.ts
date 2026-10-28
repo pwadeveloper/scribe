@@ -152,47 +152,6 @@ export function extractPlainText(html: string): string {
   return lines.join('\n\n').trim();
 }
 
-/**
- * Screenplay HTML ready for export: writer-only lines (sections, synopses,
- * notes) are dropped and each dual-dialogue pair is wrapped in two columns.
- */
-export function prepareScreenplayHtmlForExport(html: string): string {
-  const temp = document.createElement('div');
-  temp.innerHTML = html;
-  temp
-    .querySelectorAll(
-      '[data-sp-type="section"], [data-sp-type="synopsis"], [data-sp-type="note"]'
-    )
-    .forEach((el) => el.remove());
-
-  let child = temp.firstElementChild;
-  while (child) {
-    if (child.getAttribute('data-dual') === '1') {
-      const wrapper = document.createElement('div');
-      wrapper.className = 'dual-dialogue';
-      const left = document.createElement('div');
-      const right = document.createElement('div');
-      wrapper.append(left, right);
-      child.before(wrapper);
-      let el: Element | null = wrapper.nextElementSibling;
-      while (el && el.getAttribute('data-dual') === '1') {
-        const next: Element | null = el.nextElementSibling;
-        left.appendChild(el);
-        el = next;
-      }
-      while (el && el.getAttribute('data-dual') === '2') {
-        const next: Element | null = el.nextElementSibling;
-        right.appendChild(el);
-        el = next;
-      }
-      child = wrapper.nextElementSibling;
-    } else {
-      child = child.nextElementSibling;
-    }
-  }
-  return temp.innerHTML;
-}
-
 export function htmlToMarkdown(title: string, html: string): string {
   const temp = document.createElement('div');
   temp.innerHTML = html;
@@ -257,7 +216,7 @@ export function htmlToMarkdown(title: string, html: string): string {
       return;
     }
     // Remaining screenplay elements follow Fountain notation
-    if (spType === 'shot') {
+    if (spType === 'shot' || spType === 'cast-list' || spType === 'sequence') {
       blocks.push(content.toUpperCase());
       return;
     }
@@ -336,13 +295,52 @@ export function htmlToMarkdown(title: string, html: string): string {
   return blocks.join('\n\n').trim() + '\n';
 }
 
+export function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+export const DEFAULT_TITLE_PAGE_CREDIT = 'Written by';
+
+/** Fountain title page block: `Key: value` lines, multi-line values indented. */
+export function titlePageToFountain(doc: DocumentItem): string {
+  const tp = doc.titlePage ?? {};
+  const fields: [string, string | undefined][] = [
+    ['Title', doc.title],
+    ['Episode', tp.episode?.trim() ? `"${tp.episode.trim()}"` : undefined],
+    ['Credit', tp.credit ?? DEFAULT_TITLE_PAGE_CREDIT],
+    ['Author', tp.author],
+    ['Source', tp.source],
+    ['Draft date', tp.draftDate],
+    ['Contact', tp.contact],
+    ['Notes', tp.notes],
+    ['Copyright', tp.copyright],
+  ];
+  return fields
+    .filter(([, value]) => value && value.trim())
+    .map(([key, value]) => {
+      const lines = value!.trim().split(/\n/);
+      return lines.length === 1
+        ? `${key}: ${lines[0]}`
+        : `${key}:\n${lines.map((l) => `    ${l}`).join('\n')}`;
+    })
+    .join('\n');
+}
+
 export function documentToFullMarkdown(doc: DocumentItem): string {
   if (doc.kind === 'essay' || !doc.units || doc.units.length === 0) {
     return htmlToMarkdown(doc.title, doc.contentHtml);
   }
 
-  const sections: string[] = [`# ${doc.title || 'Untitled'}`];
-  if (doc.subtitle) {
+  // Screenplays open with a Fountain title page; other works with a heading
+  const sections: string[] =
+    doc.kind === 'screenplay'
+      ? [titlePageToFountain(doc)]
+      : [`# ${doc.title || 'Untitled'}`];
+  if (doc.subtitle && doc.kind !== 'screenplay') {
     sections.push(`*${doc.subtitle}*`);
   }
 
