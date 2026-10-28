@@ -156,6 +156,46 @@ export const SidebarDrawer: React.FC<SidebarDrawerProps> = ({
     setExpandedFolders((prev) => ({ ...prev, [kind]: !prev[kind] }));
   };
 
+  const renderWorkTypeIcon = (kind: WorkKind) => {
+    const fill = toneVar(WORK_KIND_TONE[kind]);
+    if (kind === 'book') {
+      return (
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.85}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="size-3.5 shrink-0 text-[var(--ink-2)]"
+          aria-hidden="true"
+        >
+          <path
+            d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"
+            fill={fill}
+          />
+          <path d="M12 7v14" />
+        </svg>
+      );
+    }
+    if (kind === 'screenplay') {
+      return (
+        <Film
+          className="size-3.5 shrink-0 text-[var(--ink-2)]"
+          fill={fill}
+          strokeWidth={1.85}
+        />
+      );
+    }
+    return (
+      <Feather
+        className="size-3.5 shrink-0 text-[var(--ink-2)]"
+        fill={fill}
+        strokeWidth={1.85}
+      />
+    );
+  };
+
   // ============================================================================
   // IMAGE 1-INSPIRED CONNECTED FOLDER TREE VIEW
   // ============================================================================
@@ -270,11 +310,7 @@ export const SidebarDrawer: React.FC<SidebarDrawerProps> = ({
                           className="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-start transition-colors hover:bg-[var(--bg-subtle-hover)]"
                         >
                           <div className="flex min-w-0 items-center gap-1.5">
-                            <Folder
-                              className="size-3.5 shrink-0 text-[var(--ink-2)]"
-                              fill={toneVar(WORK_KIND_TONE[doc.kind])}
-                              strokeWidth={1.85}
-                            />
+                            {renderWorkTypeIcon(doc.kind)}
                             <span
                               style={{
                                 color: isDocActive
