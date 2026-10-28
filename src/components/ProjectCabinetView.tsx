@@ -833,7 +833,7 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
             <div className="mb-1.5 h-1.5 w-14 rounded-full bg-[var(--border-strong)]" />
             <div className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--ink-2)] [font-variant-numeric:tabular-nums]">
               {selectedCategory === 'all'
-                ? 'VELLUM ARCHIVE'
+                ? 'INKUBATOR ARCHIVE'
                 : `${selectedCategory.toUpperCase()} DRAWER`}{' '}
               / {String(filteredDocs.length).padStart(2, '0')}{' '}
               {filteredDocs.length === 1 ? 'FILE' : 'FILES'}

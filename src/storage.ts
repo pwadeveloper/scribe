@@ -187,7 +187,7 @@ export const STARTER_ESSAY: DocumentItem = {
   createdAt: Date.now() - 3600_000,
   updatedAt: Date.now() - 1800_000,
   contentHtml: `<p>Every good sentence begins in silence. When the surrounding chrome disappears—when notifications, sidebars, and blinking toolbars step out of the room—thought slows down just enough to find its real cadence.</p>
-<p><strong>Vellum</strong> is a quiet room for writing books, screenplays, and essays. Start typing anywhere and the interface gently recedes, leaving only warm paper and ink. Move your cursor or press <code>Esc</code> whenever you want your tools back.</p>
+<p><strong>INKubator</strong> is a quiet room for writing books, screenplays, and essays. Start typing anywhere and the interface gently recedes, leaving only warm paper and ink. Move your cursor or press <code>Esc</code> whenever you want your tools back.</p>
 <h2>Three Ways to Write</h2>
 <p>Whether you are structuring a multi-chapter novel, formatting dialogue in a screenplay scene, or drafting a long-form essay, the workspace adapts to the form of your work:</p>
 <ul>

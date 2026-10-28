@@ -1,12 +1,12 @@
-# Vellum
+# INKubator
 
-Vellum is a local-first web editor for writing books, screenplays, and essays without UI clutter in the way.
+INKubator is a local-first web editor for writing books, screenplays, and essays without UI clutter in the way.
 
 When you start typing, the top header and bottom status pill fade out so only the page and your text remain on screen. Moving the mouse or pressing `Esc` brings the controls back.
 
 ## Three writing modes
 
-Every work in Vellum uses one of three structures, chosen when you click **+ New** in the top bar.
+Every work in INKubator uses one of three structures, chosen when you click **+ New** in the top bar.
 
 ### Books and novels
 

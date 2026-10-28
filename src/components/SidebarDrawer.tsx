@@ -576,7 +576,7 @@ export const SidebarDrawer: React.FC<SidebarDrawerProps> = ({
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="font-serif text-base font-semibold tracking-tight text-[var(--ink-1)]">
-              Vellum
+              INKubator
             </span>
             <span className="rounded-md bg-[var(--bg-subtle)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--ink-3)] [font-variant-numeric:tabular-nums]">
               {documents.length}
