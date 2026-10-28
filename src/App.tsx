@@ -906,6 +906,16 @@ export const App: React.FC = () => {
               screenplayExport: { ...d.screenplayExport, ...patch },
             }))
           }
+          onChangeTitlePage={(patch) =>
+            updateActiveDocument((d) => ({
+              ...d,
+              titlePage: { ...d.titlePage, ...patch },
+            }))
+          }
+          onOpenTitlePage={() => {
+            setScreenplayExportOpen(false);
+            setTitlePageOpen(true);
+          }}
           onLockDraft={(color) =>
             updateActiveDocument((d) => ({
               ...d,

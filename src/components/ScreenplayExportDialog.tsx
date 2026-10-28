@@ -1,7 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { Download, Lock, Printer, X } from 'lucide-react';
-import { DocumentItem, RevisionColor, ScreenplayExportSettings } from '../types';
+import {
+  DocumentItem,
+  RevisionColor,
+  ScreenplayExportSettings,
+  TitlePage,
+} from '../types';
+import { DEFAULT_TITLE_PAGE_CREDIT } from '../editorUtils';
 import {
   REVISION_COLORS,
   fillTokens,
@@ -15,10 +21,27 @@ interface ScreenplayExportDialogProps {
   doc: DocumentItem;
   onClose: () => void;
   onChangeSettings: (patch: Partial<ScreenplayExportSettings>) => void;
+  onChangeTitlePage: (patch: Partial<TitlePage>) => void;
+  onOpenTitlePage?: () => void;
   /** Snapshot the current draft as the revision baseline. */
   onLockDraft: (color: RevisionColor) => void;
   onDownload: () => void;
 }
+
+const CREDIT_OPTIONS = [
+  'Written by',
+  'Screenplay by',
+  'Teleplay by',
+  'Story by',
+  'Created by',
+];
+
+const todayLabel = () =>
+  new Date().toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
 
 const fieldClass =
   'h-9 w-full rounded-xl px-3 text-base text-[var(--ink-1)] transition-[box-shadow,background-color] duration-150 ease-out placeholder:text-[var(--ink-4)] focus:bg-[var(--bg-elevated)] focus:shadow-[inset_0_0_0_1px_var(--border-strong)] focus:outline-none sm:text-[13px]';
@@ -95,6 +118,8 @@ export const ScreenplayExportDialog: React.FC<ScreenplayExportDialogProps> = ({
   doc,
   onClose,
   onChangeSettings,
+  onChangeTitlePage,
+  onOpenTitlePage,
   onLockDraft,
   onDownload,
 }) => {
@@ -157,6 +182,8 @@ export const ScreenplayExportDialog: React.FC<ScreenplayExportDialogProps> = ({
 
   const baseline = doc.revisionBaseline;
   const headerExample = settings.header ? fillTokens(settings.header, doc, 2) : '';
+  const tp = doc.titlePage ?? {};
+  const credit = tp.credit ?? DEFAULT_TITLE_PAGE_CREDIT;
 
   return (
     <div
@@ -196,9 +223,136 @@ export const ScreenplayExportDialog: React.FC<ScreenplayExportDialogProps> = ({
           </button>
         </div>
 
-        <div className="grid min-h-0 flex-1 gap-5 overflow-hidden px-5 pb-5 sm:px-6 md:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="grid min-h-0 flex-1 gap-5 overflow-hidden px-5 pb-5 sm:px-6 md:grid-cols-[340px_minmax(0,1fr)]">
           {/* Options */}
           <div className="vellum-scroller min-h-0 space-y-5 overflow-y-auto pr-1">
+            {/* Title Page Credits & Contact Details */}
+            <section>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h3 className="text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--ink-3)]">
+                  Title page details
+                </h3>
+                {onOpenTitlePage && (
+                  <button
+                    type="button"
+                    onClick={onOpenTitlePage}
+                    className="text-[11px] font-medium text-[var(--ink-2)] underline decoration-[var(--border-strong)] underline-offset-2 transition-colors hover:text-[var(--ink-1)] hover:decoration-[var(--ink-1)]"
+                  >
+                    More fields…
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-2.5">
+                <div className="grid grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] gap-2">
+                  <div>
+                    <label
+                      htmlFor="sp-export-credit"
+                      className="mb-1 block text-xs font-medium text-[var(--ink-2)]"
+                    >
+                      Credit
+                    </label>
+                    <input
+                      id="sp-export-credit"
+                      type="text"
+                      list="sp-export-credit-options"
+                      value={credit}
+                      onChange={(e) =>
+                        onChangeTitlePage({ credit: e.target.value })
+                      }
+                      placeholder="Written by"
+                      style={{ backgroundColor: 'var(--bg-surface)' }}
+                      className={fieldClass}
+                    />
+                    <datalist id="sp-export-credit-options">
+                      {CREDIT_OPTIONS.map((option) => (
+                        <option key={option} value={option} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="sp-export-author"
+                      className="mb-1 block text-xs font-medium text-[var(--ink-2)]"
+                    >
+                      Writer name
+                    </label>
+                    <input
+                      ref={firstFieldRef}
+                      id="sp-export-author"
+                      type="text"
+                      autoComplete="name"
+                      value={tp.author ?? ''}
+                      onChange={(e) =>
+                        onChangeTitlePage({ author: e.target.value })
+                      }
+                      placeholder="Your name"
+                      style={{ backgroundColor: 'var(--bg-surface)' }}
+                      className={fieldClass}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="sp-export-contact"
+                    className="mb-1 block text-xs font-medium text-[var(--ink-2)]"
+                  >
+                    Contact details{' '}
+                    <span className="font-normal text-[var(--ink-3)]">
+                      lower left
+                    </span>
+                  </label>
+                  <textarea
+                    id="sp-export-contact"
+                    rows={3}
+                    value={tp.contact ?? ''}
+                    onChange={(e) =>
+                      onChangeTitlePage({ contact: e.target.value })
+                    }
+                    placeholder={'Email\nPhone\nAgent or representation'}
+                    style={{ backgroundColor: 'var(--bg-surface)' }}
+                    className="w-full resize-none rounded-xl px-3 py-2 text-base leading-snug text-[var(--ink-1)] transition-[box-shadow,background-color] duration-150 ease-out placeholder:text-[var(--ink-4)] focus:bg-[var(--bg-elevated)] focus:shadow-[inset_0_0_0_1px_var(--border-strong)] focus:outline-none sm:text-[13px]"
+                  />
+                </div>
+
+                <div>
+                  <div className="mb-1 flex items-baseline justify-between gap-2">
+                    <label
+                      htmlFor="sp-export-draft-date"
+                      className="text-xs font-medium text-[var(--ink-2)]"
+                    >
+                      Draft date{' '}
+                      <span className="font-normal text-[var(--ink-3)]">
+                        optional
+                      </span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onChangeTitlePage({ draftDate: todayLabel() })
+                      }
+                      className="text-[11px] font-medium text-[var(--ink-2)] underline decoration-[var(--border-strong)] underline-offset-2 transition-colors hover:text-[var(--ink-1)] hover:decoration-[var(--ink-1)]"
+                    >
+                      Today
+                    </button>
+                  </div>
+                  <input
+                    id="sp-export-draft-date"
+                    type="text"
+                    value={tp.draftDate ?? ''}
+                    onChange={(e) =>
+                      onChangeTitlePage({ draftDate: e.target.value })
+                    }
+                    placeholder="First draft, October 2026"
+                    style={{ backgroundColor: 'var(--bg-surface)' }}
+                    className={fieldClass}
+                  />
+                </div>
+              </div>
+            </section>
+
             <section>
               <h3 className="mb-2 text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--ink-3)]">
                 Header & footer
@@ -209,7 +363,6 @@ export const ScreenplayExportDialog: React.FC<ScreenplayExportDialogProps> = ({
                     Header <span className="font-normal text-[var(--ink-3)]">top left</span>
                   </label>
                   <input
-                    ref={firstFieldRef}
                     id="sp-header"
                     type="text"
                     value={settings.header}
