@@ -8,7 +8,6 @@ import {
   ArrowUpRight,
   Folder,
   Layers,
-  Sparkles,
   Trash2,
   Pin,
 } from 'lucide-react';
@@ -40,7 +39,10 @@ export const SegmentedTickMeter: React.FC<{
   segments?: number;
 }> = ({ current, target, segments = 12 }) => {
   const ratio = target > 0 ? Math.min(1, current / target) : 0;
-  const filledCount = Math.max(current > 0 ? 1 : 0, Math.round(ratio * segments));
+  const filledCount = Math.max(
+    current > 0 ? 1 : 0,
+    Math.round(ratio * segments)
+  );
 
   return (
     <div className="flex items-center gap-2 [font-variant-numeric:tabular-nums]">
@@ -51,7 +53,9 @@ export const SegmentedTickMeter: React.FC<{
             <span
               key={idx}
               style={{
-                backgroundColor: filled ? 'var(--accent)' : 'var(--border-strong)',
+                backgroundColor: filled
+                  ? 'var(--accent)'
+                  : 'var(--border-strong)',
                 opacity: filled ? 1 : 0.45,
               }}
               className="inline-block h-3 w-[2.5px] rounded-full transition-colors duration-200"
@@ -59,7 +63,7 @@ export const SegmentedTickMeter: React.FC<{
           );
         })}
       </div>
-      <span className=" font-mono text-[11px] text-[var(--ink-2)]">
+      <span className="font-mono text-[11px] text-[var(--ink-2)]">
         {current.toLocaleString()}{' '}
         <span className="text-[var(--ink-4)]">
           / {target.toLocaleString()}w
@@ -78,13 +82,14 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
   onTogglePin,
   onDeleteDoc,
 }) => {
-  const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('all');
+  const [selectedCategory, setSelectedCategory] =
+    useState<CategoryFilter>('all');
   const [inspectedDocId, setInspectedDocId] = useState<string>(activeDocId);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const inspectorCardRef = useRef<HTMLDivElement>(null);
-  const folderRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const inspectorContentRef = useRef<HTMLDivElement>(null);
+  const folderVisualRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const filteredDocs = useMemo(() => {
     if (selectedCategory === 'all') return documents;
@@ -115,25 +120,41 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
     );
   }, [filteredDocs, inspectedDoc]);
 
-  // Animate the dark Inspector Card when switching inspected folder in the cabinet
+  // Subtle cross-fade of ONLY the inner text inside the fixed-height Inspector Card
+  // so the card frame and the folder stack below never shift or jitter
   useEffect(() => {
-    const el = inspectorCardRef.current;
+    const el = inspectorContentRef.current;
     if (!el || prefersReducedMotion()) return;
     gsap.fromTo(
       el,
-      { y: 8, opacity: 0.75, scale: 0.99 },
+      { opacity: 0.55, y: 3 },
       {
-        y: 0,
         opacity: 1,
-        scale: 1,
-        duration: 0.22,
-        ease: 'power3.out',
-        overwrite: 'auto',
+        y: 0,
+        duration: 0.16,
+        ease: 'power2.out',
+        overwrite: true,
       }
     );
   }, [inspectedDoc?.id]);
 
-  // Stagger entrance of the view
+  // Sync visual lift of all folders whenever inspectedDoc changes
+  useEffect(() => {
+    if (prefersReducedMotion()) return;
+    filteredDocs.forEach((doc) => {
+      const visualEl = folderVisualRefs.current[doc.id];
+      if (!visualEl) return;
+      const isInspected = doc.id === inspectedDoc?.id;
+      gsap.to(visualEl, {
+        y: isInspected ? -5 : 0,
+        duration: 0.2,
+        ease: 'power2.out',
+        overwrite: 'auto',
+      });
+    });
+  }, [inspectedDoc?.id, filteredDocs]);
+
+  // Entrance animation of the page
   useEffect(() => {
     const el = containerRef.current;
     if (!el || prefersReducedMotion()) return;
@@ -144,7 +165,11 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
     );
   }, []);
 
-  const btnHover = gsapButtonHover({ hoverScale: 1.02, hoverY: -1, pressScale: 0.97 });
+  const btnHover = gsapButtonHover({
+    hoverScale: 1.02,
+    hoverY: -1,
+    pressScale: 0.97,
+  });
 
   const counts = useMemo(() => {
     return {
@@ -154,27 +179,6 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
       essay: documents.filter((d) => d.kind === 'essay').length,
     };
   }, [documents]);
-
-  const handleFolderTabEnter = (docId: string, el: HTMLElement) => {
-    setInspectedDocId(docId);
-    if (prefersReducedMotion() || !canHover()) return;
-    gsap.to(el, {
-      y: -6,
-      duration: 0.2,
-      ease: 'power2.out',
-      overwrite: 'auto',
-    });
-  };
-
-  const handleFolderTabLeave = (docId: string, el: HTMLElement) => {
-    if (prefersReducedMotion()) return;
-    gsap.to(el, {
-      y: docId === inspectedDoc?.id ? -3 : 0,
-      duration: 0.22,
-      ease: 'power2.out',
-      overwrite: 'auto',
-    });
-  };
 
   const handlePocketHoverEnter = (el: HTMLElement) => {
     if (prefersReducedMotion() || !canHover()) return;
@@ -232,7 +236,9 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
     {
       id: 'book',
       title: 'Books & Novels',
-      subtitle: `${counts.book} ${counts.book === 1 ? 'manuscript' : 'manuscripts'}`,
+      subtitle: `${counts.book} ${
+        counts.book === 1 ? 'manuscript' : 'manuscripts'
+      }`,
       count: counts.book,
       kind: 'book',
       icon: BookOpen,
@@ -240,7 +246,9 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
     {
       id: 'screenplay',
       title: 'Screenplays',
-      subtitle: `${counts.screenplay} ${counts.screenplay === 1 ? 'script' : 'scripts'}`,
+      subtitle: `${counts.screenplay} ${
+        counts.screenplay === 1 ? 'script' : 'scripts'
+      }`,
       count: counts.screenplay,
       kind: 'screenplay',
       icon: Film,
@@ -255,8 +263,8 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
     },
   ];
 
-  // Tab horizontal positions cycling left / center / right like a real filing cabinet
-  const tabPositions = ['8%', '38%', '64%', '18%', '50%'];
+  // Staggered horizontal positions for die-cut folder tabs (like Image 3)
+  const tabPositions = ['7%', '36%', '61%', '18%', '46%'];
 
   return (
     <div
@@ -274,7 +282,8 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
             Project Archive
           </h1>
           <p className="mt-1 text-xs text-[var(--ink-3)]">
-            Browse your folders by format or pull any file from the cabinet stack below.
+            Browse your folders by format or pull any file from the cabinet stack
+            below.
           </p>
         </div>
 
@@ -407,15 +416,16 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
                     <div className="h-1 w-9 rounded-full bg-[var(--ink-4)] opacity-40" />
                   </div>
 
-                  {/* Front Pocket Body with Die-Cut Top Curve */}
+                  {/* Front Pocket Body */}
                   <div
                     style={{
-                      backgroundColor: isSelected ? 'var(--ink-1)' : 'var(--ink-2)',
+                      backgroundColor: isSelected
+                        ? 'var(--ink-1)'
+                        : 'var(--ink-2)',
                       boxShadow: '0 6px 14px -4px rgba(0,0,0,0.22)',
                     }}
                     className="absolute inset-x-1 bottom-0 h-20 rounded-xl p-2.5 transition-colors"
                   >
-                    {/* TopRight Notch Accent */}
                     <div className="flex h-full items-end justify-between">
                       <span
                         style={{
@@ -452,11 +462,11 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
             Interactive File Cabinet
           </span>
           <span className="font-mono text-[11px] text-[var(--ink-3)]">
-            Hover or click any folder tab to inspect · Double-click to open
+            Hover or click any folder tab to inspect · Click OPEN to write
           </span>
         </div>
 
-        {/* Top Dark Monospace Inspector Card rising out of the Cabinet (Image 3 centerpiece) */}
+        {/* Top Dark Monospace Inspector Card rising out of the Cabinet (FIXED HEIGHT so zero layout shift!) */}
         {inspectedDoc && inspectedMetrics && (
           <div className="relative mx-auto w-[86%] sm:w-[78%]">
             {/* Background Cabinet Backboard Lip */}
@@ -465,133 +475,146 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
                 backgroundColor: 'var(--bg-surface)',
                 border: '1px solid var(--border-strong)',
               }}
-              className="absolute -inset-x-4 -bottom-4 top-6 rounded-t-xl"
+              className="pointer-events-none absolute -inset-x-5 -bottom-6 top-6 rounded-t-xl"
             />
 
             <div
-              ref={inspectorCardRef}
               style={{
                 backgroundColor: '#1B1A18',
                 color: '#EAE4DC',
                 boxShadow: '0 16px 34px -8px rgba(0, 0, 0, 0.35)',
                 border: '1px solid rgba(255,255,255,0.1)',
               }}
-              className="relative z-10 rounded-xl p-5 sm:p-6"
+              className="relative z-10 flex h-[228px] flex-col justify-between rounded-xl p-5 sm:h-[224px] sm:p-6"
             >
-              {/* Top Monospace Index Line: REC 001 / 008 */}
-              <div className="mb-3 flex items-center justify-between font-mono text-[11px] tracking-[0.06em] text-[#8F887F]">
-                <span>
-                  FILE {String(inspectedIndex + 1).padStart(3, '0')} /{' '}
-                  {String(filteredDocs.length).padStart(3, '0')} ·{' '}
-                  {inspectedDoc.kind.toUpperCase()}
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onTogglePin(inspectedDoc.id)}
-                    title={inspectedDoc.pinned ? 'Unpin' : 'Pin to top'}
-                    className={`rounded p-1 transition-colors hover:bg-white/10 ${
-                      inspectedDoc.pinned ? 'text-[#D4845A]' : 'text-[#8F887F]'
-                    }`}
-                  >
-                    <Pin className="size-3.5" />
-                  </button>
-                  {documents.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setConfirmDeleteId(
-                          confirmDeleteId === inspectedDoc.id
-                            ? null
-                            : inspectedDoc.id
-                        )
-                      }
-                      title="Delete manuscript"
-                      className="rounded p-1 text-[#8F887F] transition-colors hover:bg-white/10 hover:text-red-400"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Excerpt Quote in Monospace (just like Image 3!) */}
-              <p className="line-clamp-4 font-mono text-xs leading-relaxed text-[#EAE4DC]/90 sm:text-[13px]">
-                "{inspectedExcerpt}"
-              </p>
-
-              {/* Bottom Metadata + Segmented Tick Meter + Open CTA */}
-              <div className="mt-5 flex flex-wrap items-end justify-between gap-4 border-t border-white/10 pt-4">
+              <div
+                ref={inspectorContentRef}
+                className="flex h-full flex-col justify-between"
+              >
+                {/* Top Monospace Index Line + Excerpt */}
                 <div>
-                  <div className="font-mono text-xs font-semibold uppercase tracking-[0.05em] text-white">
-                    {inspectedDoc.title || 'UNTITLED MANUSCRIPT'}
+                  <div className="mb-2.5 flex items-center justify-between font-mono text-[11px] tracking-[0.06em] text-[#8F887F] [font-variant-numeric:tabular-nums]">
+                    <span>
+                      FILE {String(inspectedIndex + 1).padStart(3, '0')} /{' '}
+                      {String(filteredDocs.length).padStart(3, '0')} ·{' '}
+                      {inspectedDoc.kind.toUpperCase()}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => onTogglePin(inspectedDoc.id)}
+                        title={inspectedDoc.pinned ? 'Unpin' : 'Pin to top'}
+                        className={`rounded p-1 transition-colors hover:bg-white/10 ${
+                          inspectedDoc.pinned
+                            ? 'text-[#D4845A]'
+                            : 'text-[#8F887F]'
+                        }`}
+                      >
+                        <Pin className="size-3.5" />
+                      </button>
+                      {documents.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setConfirmDeleteId(
+                              confirmDeleteId === inspectedDoc.id
+                                ? null
+                                : inspectedDoc.id
+                            )
+                          }
+                          title="Delete manuscript"
+                          className="rounded p-1 text-[#8F887F] transition-colors hover:bg-white/10 hover:text-red-400"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.04em] text-[#8F887F]">
-                    {inspectedDoc.kind === 'book'
-                      ? `${inspectedDoc.units?.length || 1} CHAPTERS`
-                      : inspectedDoc.kind === 'screenplay'
-                      ? `${inspectedDoc.units?.length || 1} SCENES`
-                      : 'LONG-FORM ESSAY'}{' '}
-                    · {inspectedMetrics.words.toLocaleString()} WORDS
+
+                  {/* Fixed-Height Excerpt Box (4 lines max, never changes parent height) */}
+                  <div className="h-[76px] overflow-hidden">
+                    {confirmDeleteId === inspectedDoc.id ? (
+                      <div className="flex h-full items-center justify-between rounded-lg bg-red-950/70 px-3.5 py-2 text-xs text-red-200">
+                        <span>
+                          Delete &ldquo;{inspectedDoc.title || 'Untitled'}
+                          &rdquo;?
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="rounded px-2 py-1 text-white/75 hover:text-white"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onDeleteDoc(inspectedDoc.id);
+                              setConfirmDeleteId(null);
+                            }}
+                            className="rounded bg-red-600 px-2.5 py-1 font-medium text-white"
+                          >
+                            Confirm Delete
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="line-clamp-3 font-mono text-xs leading-relaxed text-[#EAE4DC]/90 sm:text-[13px]">
+                        &ldquo;{inspectedExcerpt}&rdquo;
+                      </p>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  {(inspectedDoc.kind === 'book' ||
-                    inspectedDoc.kind === 'screenplay') && (
+                {/* Bottom Metadata + Action Buttons */}
+                <div className="flex items-end justify-between gap-3 border-t border-white/10 pt-3.5">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-mono text-xs font-semibold uppercase tracking-[0.05em] text-white">
+                      {inspectedDoc.title || 'UNTITLED MANUSCRIPT'}
+                    </div>
+                    <div className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.04em] text-[#8F887F] [font-variant-numeric:tabular-nums]">
+                      {inspectedDoc.kind === 'book'
+                        ? `${inspectedDoc.units?.length || 1} CHAPTERS`
+                        : inspectedDoc.kind === 'screenplay'
+                        ? `${inspectedDoc.units?.length || 1} SCENES`
+                        : 'LONG-FORM ESSAY'}{' '}
+                      · {inspectedMetrics.words.toLocaleString()} WORDS
+                    </div>
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-2">
+                    {(inspectedDoc.kind === 'book' ||
+                      inspectedDoc.kind === 'screenplay') && (
+                      <button
+                        type="button"
+                        onClick={() => onSelectDocBirdsEye(inspectedDoc.id)}
+                        className="flex h-8 items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 font-mono text-[11px] font-medium text-[#EAE4DC] transition-colors hover:bg-white/15"
+                      >
+                        <Layers className="size-3 text-[#D4845A]" />
+                        <span>TIMELINE</span>
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => onSelectDocBirdsEye(inspectedDoc.id)}
-                      className="flex h-8 items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 font-mono text-[11px] font-medium text-[#EAE4DC] transition-colors hover:bg-white/15"
+                      onClick={() => onSelectDocAndWrite(inspectedDoc.id)}
+                      style={{ backgroundColor: '#EAE4DC', color: '#141312' }}
+                      className="flex h-8 items-center gap-1 rounded-lg px-3.5 font-mono text-[11px] font-semibold uppercase tracking-[0.04em] transition-transform active:scale-95"
                     >
-                      <Layers className="size-3 text-[#D4845A]" />
-                      <span>TIMELINE</span>
+                      <span>OPEN FILE</span>
+                      <ArrowUpRight className="size-3.5" />
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => onSelectDocAndWrite(inspectedDoc.id)}
-                    style={{ backgroundColor: '#EAE4DC', color: '#141312' }}
-                    className="flex h-8 items-center gap-1 rounded-lg px-3.5 font-mono text-[11px] font-semibold uppercase tracking-[0.04em] transition-transform active:scale-95"
-                  >
-                    <span>OPEN FILE</span>
-                    <ArrowUpRight className="size-3.5" />
-                  </button>
+                  </div>
                 </div>
               </div>
-
-              {confirmDeleteId === inspectedDoc.id && (
-                <div className="mt-3 flex items-center justify-between rounded-lg bg-red-950/60 px-3 py-2 text-xs text-red-200">
-                  <span>Delete "{inspectedDoc.title || 'Untitled'}"?</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setConfirmDeleteId(null)}
-                      className="px-2 py-0.5 text-white/70 hover:text-white"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onDeleteDoc(inspectedDoc.id);
-                        setConfirmDeleteId(null);
-                      }}
-                      className="rounded bg-red-600 px-2.5 py-0.5 font-medium text-white"
-                    >
-                      Confirm Delete
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         )}
 
         {/* Stacked Stepped Folders & Black Category Dividers (Image 3 Architecture) */}
-        <div className="relative mt-2 flex flex-col items-center">
-          {/* Black Divider Tab Bar embedded in the Cabinet */}
-          <div className="relative z-10 flex w-[90%] items-end justify-between px-4">
+        <div className="relative mt-3 flex flex-col items-center">
+          {/* Black Die-Cut Category Divider Tabs */}
+          <div className="relative z-10 mb-1 flex w-[88%] items-end justify-between px-3">
             {(
               [
                 { id: 'all', label: 'A–Z ALL' },
@@ -609,10 +632,9 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
                   style={{
                     backgroundColor: active ? 'var(--accent)' : '#1C1917',
                     color: '#FAF7F2',
-                    clipPath:
-                      'polygon(12% 0%, 88% 0%, 100% 100%, 0% 100%)',
+                    clipPath: 'polygon(12% 0%, 88% 0%, 100% 100%, 0% 100%)',
                   }}
-                  className="h-6 px-4 font-mono text-[10px] font-semibold tracking-[0.08em] transition-transform hover:-translate-y-0.5"
+                  className="h-6 px-4 font-mono text-[10px] font-semibold tracking-[0.08em] transition-opacity hover:opacity-90"
                 >
                   {divTab.label}
                 </button>
@@ -623,102 +645,125 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
           {/* Individual Stepped Manila Folder Layers */}
           {filteredDocs.map((doc, idx) => {
             const isInspected = doc.id === inspectedDoc?.id;
-            const widthPercent = Math.min(98, 91 + idx * 1.2);
+            const widthPercent = Math.min(98, 90 + idx * 1.35);
             const tabLeft = tabPositions[idx % tabPositions.length];
+            const folderBg = isInspected
+              ? 'var(--bg-elevated)'
+              : 'var(--bg-surface)';
+            const borderColor = isInspected
+              ? 'var(--accent)'
+              : 'var(--border-strong)';
 
             return (
               <div
                 key={doc.id}
-                ref={(el) => {
-                  folderRefs.current[doc.id] = el;
-                }}
-                onMouseEnter={(e) => handleFolderTabEnter(doc.id, e.currentTarget)}
-                onMouseLeave={(e) => handleFolderTabLeave(doc.id, e.currentTarget)}
-                onClick={() => setInspectedDocId(doc.id)}
-                onDoubleClick={() => onSelectDocAndWrite(doc.id)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    onSelectDocAndWrite(doc.id);
-                  } else if (e.key === ' ') {
-                    e.preventDefault();
-                    setInspectedDocId(doc.id);
-                  }
-                }}
                 style={{
                   width: `${widthPercent}%`,
                   zIndex: 10 + idx,
-                  transform: isInspected ? 'translateY(-3px)' : 'translateY(0px)',
                 }}
-                className="group relative -mt-1 cursor-pointer select-none transition-transform"
+                className="pointer-events-none relative -mt-1.5 select-none"
               >
-                {/* Die-Cut Folder Tab */}
-                <div
-                  style={{
-                    marginLeft: tabLeft,
-                    backgroundColor: isInspected
-                      ? 'var(--bg-elevated)'
-                      : 'var(--bg-surface)',
-                    borderTop: `1px solid ${
-                      isInspected ? 'var(--accent)' : 'var(--border-strong)'
-                    }`,
-                    borderLeft: `1px solid ${
-                      isInspected ? 'var(--accent)' : 'var(--border-strong)'
-                    }`,
-                    borderRight: `1px solid ${
-                      isInspected ? 'var(--accent)' : 'var(--border-strong)'
-                    }`,
-                  }}
-                  className="relative inline-flex h-6 max-w-[200px] items-center gap-1.5 rounded-t-lg px-3.5"
-                >
-                  <span
-                    style={{
-                      backgroundColor: isInspected
-                        ? 'var(--accent)'
-                        : 'var(--ink-4)',
-                    }}
-                    className="size-1.5 shrink-0 rounded-full"
-                  />
-                  <span
-                    style={{
-                      color: isInspected ? 'var(--accent)' : 'var(--ink-1)',
-                    }}
-                    className="truncate font-mono text-[10px] font-semibold uppercase tracking-[0.06em]"
+                {/* 1. STATIONARY HIT-TEST LAYER: Never moves or resizes, preventing any hover oscillation */}
+                <div className="pointer-events-none absolute inset-0 z-20 flex flex-col">
+                  <div className="pointer-events-none flex">
+                    <button
+                      type="button"
+                      aria-label={`Inspect ${doc.title.trim() || 'Untitled'}`}
+                      onMouseEnter={() => setInspectedDocId(doc.id)}
+                      onFocus={() => setInspectedDocId(doc.id)}
+                      onClick={() => setInspectedDocId(doc.id)}
+                      onDoubleClick={() => onSelectDocAndWrite(doc.id)}
+                      style={{ marginLeft: tabLeft }}
+                      className="pointer-events-auto h-6 w-48 max-w-[220px] cursor-pointer rounded-t-lg bg-transparent focus:outline-none"
+                    />
+                  </div>
+                  <div
+                    onMouseEnter={() => setInspectedDocId(doc.id)}
+                    onClick={() => setInspectedDocId(doc.id)}
+                    onDoubleClick={() => onSelectDocAndWrite(doc.id)}
+                    className="pointer-events-auto flex h-9 w-full cursor-pointer items-center justify-end px-4"
                   >
-                    {doc.title.trim() || 'UNTITLED'}
-                  </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectDocAndWrite(doc.id);
+                      }}
+                      style={{
+                        opacity: isInspected ? 1 : 0,
+                        pointerEvents: isInspected ? 'auto' : 'none',
+                      }}
+                      className="font-mono text-[10px] font-semibold text-[var(--accent)] transition-opacity duration-150 hover:underline"
+                    >
+                      OPEN →
+                    </button>
+                  </div>
                 </div>
 
-                {/* Folder Horizontal Ridge Sheet */}
+                {/* 2. PURE VISUAL LAYER (pointer-events-none): Lifts smoothly via GSAP without shifting hitboxes */}
                 <div
-                  style={{
-                    backgroundColor: isInspected
-                      ? 'var(--bg-elevated)'
-                      : 'var(--bg-surface)',
-                    borderTop: `1px solid ${
-                      isInspected ? 'var(--accent)' : 'var(--border-strong)'
-                    }`,
-                    borderLeft: '1px solid var(--border-strong)',
-                    borderRight: '1px solid var(--border-strong)',
+                  ref={(el) => {
+                    folderVisualRefs.current[doc.id] = el;
                   }}
-                  className="flex h-8 w-full items-center justify-between rounded-t-sm px-4"
+                  className="pointer-events-none relative z-10"
                 >
-                  <span className="font-mono text-[10px] text-[var(--ink-3)] opacity-0 transition-opacity group-hover:opacity-100">
-                    {doc.kind.toUpperCase()} ·{' '}
-                    {doc.kind === 'essay'
-                      ? 'SINGLE SHEET'
-                      : `${doc.units?.length || 1} SECTIONS`}
-                  </span>
-                  <span
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectDocAndWrite(doc.id);
+                  {/* Seamless Die-Cut Folder Tab (bottom border matches folderBg to erase seam line) */}
+                  <div className="flex">
+                    <div
+                      style={{
+                        marginLeft: tabLeft,
+                        marginBottom: '-1px',
+                        backgroundColor: folderBg,
+                        borderTop: `1px solid ${borderColor}`,
+                        borderLeft: `1px solid ${borderColor}`,
+                        borderRight: `1px solid ${borderColor}`,
+                        borderBottom: `1px solid ${folderBg}`,
+                      }}
+                      className="relative z-10 inline-flex h-6 w-48 max-w-[220px] items-center gap-1.5 rounded-t-lg px-3.5"
+                    >
+                      <span
+                        style={{
+                          backgroundColor: isInspected
+                            ? 'var(--accent)'
+                            : 'var(--ink-4)',
+                        }}
+                        className="size-1.5 shrink-0 rounded-full"
+                      />
+                      <span
+                        style={{
+                          color: isInspected
+                            ? 'var(--accent)'
+                            : 'var(--ink-1)',
+                        }}
+                        className="truncate font-mono text-[10px] font-semibold uppercase tracking-[0.06em]"
+                      >
+                        {doc.title.trim() || 'UNTITLED'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Folder Horizontal Ridge Sheet */}
+                  <div
+                    style={{
+                      backgroundColor: folderBg,
+                      borderTop: `1px solid ${borderColor}`,
+                      borderLeft: `1px solid ${borderColor}`,
+                      borderRight: `1px solid ${borderColor}`,
                     }}
-                    className="font-mono text-[10px] font-semibold text-[var(--accent)] opacity-0 transition-opacity hover:underline group-hover:opacity-100"
+                    className="flex h-9 w-full items-center justify-between rounded-t-[4px] px-4"
                   >
-                    OPEN →
-                  </span>
+                    <span
+                      style={{
+                        opacity: isInspected ? 1 : 0.55,
+                      }}
+                      className="font-mono text-[10px] text-[var(--ink-3)] transition-opacity duration-150"
+                    >
+                      {doc.kind.toUpperCase()} ·{' '}
+                      {doc.kind === 'essay'
+                        ? 'SINGLE SHEET'
+                        : `${doc.units?.length || 1} SECTIONS`}
+                    </span>
+                  </div>
                 </div>
               </div>
             );
@@ -732,7 +777,7 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
               border: '1px solid var(--border-strong)',
               boxShadow: 'var(--elevation-raised)',
             }}
-            className="flex h-24 w-full flex-col items-center justify-center rounded-b-xl rounded-t-sm"
+            className="relative -mt-1 flex h-24 w-full flex-col items-center justify-center rounded-b-xl rounded-t-[3px]"
           >
             <div className="mb-1.5 h-1.5 w-14 rounded-full bg-[var(--border-strong)]" />
             <div className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--ink-2)] [font-variant-numeric:tabular-nums]">
@@ -748,4 +793,3 @@ export const ProjectCabinetView: React.FC<ProjectCabinetViewProps> = ({
     </div>
   );
 };
-

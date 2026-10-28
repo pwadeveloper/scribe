@@ -251,15 +251,15 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
     }
   }, [doc.id, layoutMode]);
 
-  // Animate cabinet inspector card on change
+  // Animate only inner text of cabinet inspector card so card frame and folders never shift
   useEffect(() => {
     if (layoutMode !== 'cabinet') return;
     const el = cabinetInspectorRef.current;
     if (!el || prefersReducedMotion()) return;
     gsap.fromTo(
       el,
-      { y: 6, opacity: 0.8 },
-      { y: 0, opacity: 1, duration: 0.2, ease: 'power3.out', overwrite: 'auto' }
+      { y: 3, opacity: 0.55 },
+      { y: 0, opacity: 1, duration: 0.16, ease: 'power2.out', overwrite: true }
     );
   }, [inspectedCabinetUnitId, layoutMode]);
 
@@ -976,163 +976,201 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
     const inspectedItem =
       enrichedUnits.find((e) => e.unit.id === inspectedCabinetUnitId) ||
       enrichedUnits[0];
-    const tabOffsets = ['6%', '34%', '60%', '18%', '48%'];
+    const tabOffsets = ['7%', '36%', '61%', '18%', '46%'];
 
     if (!inspectedItem) return null;
 
     return (
       <div className="mx-auto max-w-2xl pt-2">
-        {/* Dark Monospace Inspector Card Rising from Top of Cabinet (Image 3) */}
+        {/* Dark Monospace Inspector Card Rising from Top of Cabinet (Fixed Height so zero layout shift) */}
         <div className="relative mx-auto w-[88%] sm:w-[80%]">
           <div
             style={{
               backgroundColor: 'var(--bg-surface)',
               border: '1px solid var(--border-strong)',
             }}
-            className="absolute -inset-x-4 -bottom-4 top-6 rounded-t-xl"
+            className="pointer-events-none absolute -inset-x-5 -bottom-6 top-6 rounded-t-xl"
           />
 
           <div
-            ref={cabinetInspectorRef}
             style={{
               backgroundColor: '#1B1A18',
               color: '#EAE4DC',
               boxShadow: '0 16px 34px -8px rgba(0, 0, 0, 0.35)',
               border: '1px solid rgba(255,255,255,0.1)',
             }}
-            className="relative z-10 rounded-xl p-5 sm:p-6"
+            className="relative z-10 flex h-[228px] flex-col justify-between rounded-xl p-5 sm:h-[224px] sm:p-6"
           >
-            <div className="mb-3 flex items-center justify-between font-mono text-[11px] tracking-[0.06em] text-[#8F887F]">
-              <span>
-                {doc.kind === 'screenplay' ? 'SCENE' : 'SEC'}{' '}
-                {String(inspectedItem.index + 1).padStart(3, '0')} /{' '}
-                {String(enrichedUnits.length).padStart(3, '0')}
-              </span>
-              <span className="uppercase text-[#D4845A]">
-                {inspectedItem.badge}
-              </span>
-            </div>
-
-            {doc.kind === 'screenplay' && (
-              <div className="mb-2 font-mono text-xs font-bold uppercase tracking-[0.05em] text-white">
-                {inspectedItem.unit.slugline || 'INT. LOCATION - DAY'}
-              </div>
-            )}
-
-            <p className="line-clamp-4 font-mono text-xs leading-relaxed text-[#EAE4DC]/90 sm:text-[13px]">
-              "{inspectedItem.snippet}"
-            </p>
-
-            <div className="mt-5 flex flex-wrap items-end justify-between gap-4 border-t border-white/10 pt-4">
+            <div
+              ref={cabinetInspectorRef}
+              className="flex h-full flex-col justify-between"
+            >
               <div>
-                <div className="font-mono text-xs font-semibold uppercase tracking-[0.05em] text-white">
-                  {inspectedItem.unit.title || inspectedItem.badge}
+                <div className="mb-2.5 flex items-center justify-between font-mono text-[11px] tracking-[0.06em] text-[#8F887F] [font-variant-numeric:tabular-nums]">
+                  <span>
+                    {doc.kind === 'screenplay' ? 'SCENE' : 'SEC'}{' '}
+                    {String(inspectedItem.index + 1).padStart(3, '0')} /{' '}
+                    {String(enrichedUnits.length).padStart(3, '0')}
+                  </span>
+                  <span className="uppercase text-[#D4845A]">
+                    {inspectedItem.badge}
+                  </span>
                 </div>
-                <div className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.04em] text-[#8F887F]">
-                  {inspectedItem.metrics.words.toLocaleString()} WORDS · EST.{' '}
-                  {inspectedItem.durationMinutes} MIN
+
+                {doc.kind === 'screenplay' && (
+                  <div className="mb-1.5 truncate font-mono text-xs font-bold uppercase tracking-[0.05em] text-white">
+                    {inspectedItem.unit.slugline || 'INT. LOCATION - DAY'}
+                  </div>
+                )}
+
+                <div className="h-[68px] overflow-hidden">
+                  <p className="line-clamp-3 font-mono text-xs leading-relaxed text-[#EAE4DC]/90 sm:text-[13px]">
+                    &ldquo;{inspectedItem.snippet}&rdquo;
+                  </p>
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => onSelectUnitAndWrite(inspectedItem.unit.id)}
-                style={{ backgroundColor: '#EAE4DC', color: '#141312' }}
-                className="flex h-8 items-center gap-1 rounded-lg px-3.5 font-mono text-[11px] font-semibold uppercase tracking-[0.04em] transition-transform active:scale-95"
-              >
-                <span>OPEN {inspectedItem.badge.toUpperCase()}</span>
-                <ArrowUpRight className="size-3.5" />
-              </button>
+              <div className="flex items-end justify-between gap-3 border-t border-white/10 pt-3.5">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-mono text-xs font-semibold uppercase tracking-[0.05em] text-white">
+                    {inspectedItem.unit.title || inspectedItem.badge}
+                  </div>
+                  <div className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.04em] text-[#8F887F] [font-variant-numeric:tabular-nums]">
+                    {inspectedItem.metrics.words.toLocaleString()} WORDS · EST.{' '}
+                    {inspectedItem.durationMinutes} MIN
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => onSelectUnitAndWrite(inspectedItem.unit.id)}
+                  style={{ backgroundColor: '#EAE4DC', color: '#141312' }}
+                  className="flex h-8 shrink-0 items-center gap-1 rounded-lg px-3.5 font-mono text-[11px] font-semibold uppercase tracking-[0.04em] transition-transform active:scale-95"
+                >
+                  <span>OPEN {inspectedItem.badge.toUpperCase()}</span>
+                  <ArrowUpRight className="size-3.5" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Stepped Manila Folder Tabs for every Chapter or Scene */}
-        <div className="relative mt-3 flex flex-col items-center">
+        <div className="relative mt-4 flex flex-col items-center">
           {enrichedUnits.map((item, idx) => {
             const isInspected = item.unit.id === inspectedItem.unit.id;
-            const widthPercent = Math.min(98, 90 + idx * 1.1);
+            const widthPercent = Math.min(98, 90 + idx * 1.2);
             const tabLeft = tabOffsets[idx % tabOffsets.length];
+            const folderBg = isInspected
+              ? 'var(--bg-elevated)'
+              : 'var(--bg-surface)';
+            const borderColor = isInspected
+              ? 'var(--accent)'
+              : 'var(--border-strong)';
 
             return (
               <div
                 key={item.unit.id}
-                onMouseEnter={() => setInspectedCabinetUnitId(item.unit.id)}
-                onClick={() => setInspectedCabinetUnitId(item.unit.id)}
-                onDoubleClick={() => onSelectUnitAndWrite(item.unit.id)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    onSelectUnitAndWrite(item.unit.id);
-                  } else if (e.key === ' ') {
-                    e.preventDefault();
-                    setInspectedCabinetUnitId(item.unit.id);
-                  }
-                }}
                 style={{
                   width: `${widthPercent}%`,
                   zIndex: 10 + idx,
-                  transform: isInspected
-                    ? 'translateY(-4px)'
-                    : 'translateY(0px)',
                 }}
-                className="group relative -mt-1 cursor-pointer select-none transition-transform duration-150"
+                className="pointer-events-none relative -mt-1.5 select-none"
               >
-                <div
-                  style={{
-                    marginLeft: tabLeft,
-                    backgroundColor: isInspected
-                      ? 'var(--bg-elevated)'
-                      : 'var(--bg-surface)',
-                    borderTop: `1px solid ${
-                      isInspected ? 'var(--accent)' : 'var(--border-strong)'
-                    }`,
-                    borderLeft: `1px solid ${
-                      isInspected ? 'var(--accent)' : 'var(--border-strong)'
-                    }`,
-                    borderRight: `1px solid ${
-                      isInspected ? 'var(--accent)' : 'var(--border-strong)'
-                    }`,
-                  }}
-                  className="inline-flex h-6 max-w-[230px] items-center gap-1.5 rounded-t-lg px-3"
-                >
-                  <span className="font-mono text-[10px] font-bold text-[var(--accent)]">
-                    {String(idx + 1).padStart(2, '0')}
-                  </span>
-                  <span className="truncate font-mono text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--ink-1)]">
-                    {item.unit.title.trim() ||
-                      (doc.kind === 'screenplay'
-                        ? item.parsedSlug?.location
-                        : item.badge)}
-                  </span>
+                {/* 1. STATIONARY HIT-TEST LAYER: Never moves or resizes, preventing hover oscillation */}
+                <div className="pointer-events-none absolute inset-0 z-20 flex flex-col">
+                  <div className="pointer-events-none flex">
+                    <button
+                      type="button"
+                      aria-label={`Inspect ${item.unit.title || item.badge}`}
+                      onMouseEnter={() => setInspectedCabinetUnitId(item.unit.id)}
+                      onFocus={() => setInspectedCabinetUnitId(item.unit.id)}
+                      onClick={() => setInspectedCabinetUnitId(item.unit.id)}
+                      onDoubleClick={() => onSelectUnitAndWrite(item.unit.id)}
+                      style={{ marginLeft: tabLeft }}
+                      className="pointer-events-auto h-6 w-48 max-w-[230px] cursor-pointer rounded-t-lg bg-transparent focus:outline-none"
+                    />
+                  </div>
+                  <div
+                    onMouseEnter={() => setInspectedCabinetUnitId(item.unit.id)}
+                    onClick={() => setInspectedCabinetUnitId(item.unit.id)}
+                    onDoubleClick={() => onSelectUnitAndWrite(item.unit.id)}
+                    className="pointer-events-auto flex h-9 w-full cursor-pointer items-center justify-end px-4"
+                  >
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectUnitAndWrite(item.unit.id);
+                      }}
+                      style={{
+                        opacity: isInspected ? 1 : 0,
+                        pointerEvents: isInspected ? 'auto' : 'none',
+                      }}
+                      className="font-mono text-[10px] font-semibold text-[var(--accent)] transition-opacity duration-150 hover:underline"
+                    >
+                      WRITE →
+                    </button>
+                  </div>
                 </div>
 
+                {/* 2. PURE VISUAL LAYER (pointer-events-none): Lifts smoothly without shifting hitboxes */}
                 <div
                   style={{
-                    backgroundColor: isInspected
-                      ? 'var(--bg-elevated)'
-                      : 'var(--bg-surface)',
-                    borderTop: `1px solid ${
-                      isInspected ? 'var(--accent)' : 'var(--border-strong)'
-                    }`,
-                    borderLeft: '1px solid var(--border-strong)',
-                    borderRight: '1px solid var(--border-strong)',
+                    transform: isInspected
+                      ? 'translateY(-4px)'
+                      : 'translateY(0px)',
                   }}
-                  className="flex h-8 w-full items-center justify-between rounded-t-sm px-4"
+                  className="pointer-events-none relative z-10 transition-transform duration-150 ease-out"
                 >
-                  <span className="font-mono text-[10px] text-[var(--ink-3)]">
-                    {item.badge.toUpperCase()} · {item.metrics.words}W
-                  </span>
-                  <span
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectUnitAndWrite(item.unit.id);
+                  <div className="flex">
+                    <div
+                      style={{
+                        marginLeft: tabLeft,
+                        marginBottom: '-1px',
+                        backgroundColor: folderBg,
+                        borderTop: `1px solid ${borderColor}`,
+                        borderLeft: `1px solid ${borderColor}`,
+                        borderRight: `1px solid ${borderColor}`,
+                        borderBottom: `1px solid ${folderBg}`,
+                      }}
+                      className="relative z-10 inline-flex h-6 w-48 max-w-[230px] items-center gap-1.5 rounded-t-lg px-3.5"
+                    >
+                      <span className="font-mono text-[10px] font-bold text-[var(--accent)]">
+                        {String(idx + 1).padStart(2, '0')}
+                      </span>
+                      <span
+                        style={{
+                          color: isInspected
+                            ? 'var(--accent)'
+                            : 'var(--ink-1)',
+                        }}
+                        className="truncate font-mono text-[10px] font-semibold uppercase tracking-[0.05em]"
+                      >
+                        {item.unit.title.trim() ||
+                          (doc.kind === 'screenplay'
+                            ? item.parsedSlug?.location
+                            : item.badge)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      backgroundColor: folderBg,
+                      borderTop: `1px solid ${borderColor}`,
+                      borderLeft: `1px solid ${borderColor}`,
+                      borderRight: `1px solid ${borderColor}`,
                     }}
-                    className="font-mono text-[10px] font-semibold text-[var(--accent)] hover:underline"
+                    className="flex h-9 w-full items-center justify-between rounded-t-[4px] px-4"
                   >
-                    WRITE →
-                  </span>
+                    <span
+                      style={{ opacity: isInspected ? 1 : 0.6 }}
+                      className="font-mono text-[10px] text-[var(--ink-3)]"
+                    >
+                      {item.badge.toUpperCase()} · {item.metrics.words}W
+                    </span>
+                  </div>
                 </div>
               </div>
             );
@@ -1146,7 +1184,7 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
               border: '1px solid var(--border-strong)',
               boxShadow: 'var(--elevation-raised)',
             }}
-            className="flex h-20 w-full flex-col items-center justify-center rounded-b-xl rounded-t-sm"
+            className="relative -mt-1 flex h-20 w-full flex-col items-center justify-center rounded-b-xl rounded-t-[3px]"
           >
             <div className="mb-1.5 h-1.5 w-12 rounded-full bg-[var(--border-strong)]" />
             <div className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--ink-2)] [font-variant-numeric:tabular-nums]">
