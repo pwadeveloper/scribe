@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>INKubator — Coming Soon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=block" rel="stylesheet" />
+<style>
+  :root {
+    --paper: #F6F2EA; --paper-2: #EFEAE0; --ink: #111111; --ink-2: #3B3A38; --muted: #77736B;
+    --signal: #FF4B36; --butter: #F6DD8B; --sage: #ABC07F; --blush: #F4BBD9;
+    --lavender: #C8C7FB; --sky: #BDD3F4; --honey: #E3B23C;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #000; overflow: hidden; }
+  body { -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision; }
+  #stage { position: relative; overflow: hidden; background: #0B0B0B; }
+  .layer, .scene { position: absolute; inset: 0; }
+  .scene { visibility: hidden; opacity: 0; overflow: hidden; }
+  .persp { position: absolute; inset: 0; perspective: 1600px; perspective-origin: 50% 50%; }
+  .cam { position: absolute; left: 50%; top: 50%; width: 0; height: 0; transform-style: preserve-3d; }
+  .p3d { position: absolute; transform-style: preserve-3d; backface-visibility: hidden; }
+  .center { position: absolute; left: 50%; top: 50%; }
+
+  /* Product shot frame */
+  .frame { position: absolute; overflow: hidden; border-radius: 18px; background: var(--paper);
+    box-shadow: 0 0 0 1px rgb(17 17 17 / 0.08), 0 30px 80px -20px rgb(17 17 17 / 0.45), 0 12px 24px -12px rgb(17 17 17 / 0.25); }
+  .frame img { position: absolute; left: 0; top: 0; width: 100%; height: auto; transform-origin: 0 0; display: block; }
+  .frame .gloss { position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(115deg, rgb(255 255 255 / 0.22) 0%, rgb(255 255 255 / 0) 38%); }
+
+  /* Type */
+  .punch { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; letter-spacing: -0.05em; line-height: 0.92; white-space: nowrap; }
+  .serif { font-family: 'Newsreader', serif; font-style: italic; font-weight: 400; letter-spacing: -0.02em; line-height: 1.05; }
+  .mono { font-family: 'JetBrains Mono', monospace; font-weight: 500; letter-spacing: 0.22em; text-transform: uppercase; }
+  .courier { font-family: 'Courier Prime', 'Courier New', monospace; }
+  .c { display: inline-block; white-space: pre; will-change: transform; }
+  .w { display: inline-block; white-space: pre; }
+  .dot { color: var(--signal); }
+
+  #flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; mix-blend-mode: normal; }
+  #grain { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.075; mix-blend-mode: overlay; pointer-events: none; image-rendering: pixelated; }
+  #vignette { position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 50%, rgb(0 0 0 / 0) 55%, rgb(0 0 0 / 0.28) 100%); }
+  .pill { display: inline-flex; align-items: center; border-radius: 999px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bg" class="layer"></div>
+  <div id="shake" class="layer"><div id="pulse" class="layer"></div></div>
+  <div id="flash"></div>
+  <canvas id="grain"></canvas>
+  <div id="vignette"></div>
+</div>
+<script src="gsap.min.js"></script>
+<script src="beats.js"></script>
+<script src="main.js"></script>
+</body>
+</html>
