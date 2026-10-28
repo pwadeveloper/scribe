@@ -436,7 +436,7 @@ export const DocumentOutline: React.FC<DocumentOutlineProps> = ({
         {/* Hovered / Tapped State: Expanded Section List */}
         <div
           ref={labelsWrapperRef}
-          inert={!isExpanded ? true : undefined}
+          aria-hidden={!isExpanded}
           style={{
             opacity: 0,
             visibility: 'hidden',

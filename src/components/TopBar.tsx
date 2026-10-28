@@ -14,12 +14,13 @@ import {
   FileText,
   FileCode,
   Printer,
-  LayoutGrid,
   PenLine,
   BookOpen,
   Film,
   Feather,
   Plus,
+  Archive,
+  GitCommitHorizontal,
 } from 'lucide-react';
 import {
   FocusMode,
@@ -42,6 +43,7 @@ interface TopBarProps {
   activeUnitBadge?: string;
   viewMode: WorkspaceViewMode;
   onToggleViewMode: () => void;
+  onToggleCabinetView: () => void;
   onOpenNewWorkModal: () => void;
   saveStatus: 'saved' | 'saving';
   settings: WriterSettings;
@@ -63,6 +65,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   activeUnitBadge,
   viewMode,
   onToggleViewMode,
+  onToggleCabinetView,
   onOpenNewWorkModal,
   saveStatus,
   settings,
@@ -261,8 +264,34 @@ export const TopBar: React.FC<TopBarProps> = ({
         </div>
       </div>
 
-      {/* Right: Bird's-Eye View Toggle (for Book/Screenplay), Writing Modes, Typography, Export */}
+      {/* Right: Cabinet Archive Toggle, Timeline/Bird's-Eye Toggle, Writing Modes, Typography, Export */}
       <div ref={menuContainerRef} className="relative flex items-center gap-1 sm:gap-1.5">
+        <button
+          type="button"
+          onClick={onToggleCabinetView}
+          {...btnHover}
+          aria-pressed={viewMode === 'cabinet'}
+          title={
+            viewMode === 'cabinet'
+              ? 'Return to writing (⌘K)'
+              : 'Open Project Filing Cabinet & Folders (⌘K)'
+          }
+          style={{
+            color: viewMode === 'cabinet' ? 'var(--bg-canvas)' : 'var(--ink-1)',
+            backgroundColor:
+              viewMode === 'cabinet' ? 'var(--ink-1)' : 'var(--bg-surface)',
+          }}
+          className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-colors duration-150 ease-out"
+        >
+          <Archive
+            className={`size-3.5 ${
+              viewMode === 'cabinet' ? '' : 'text-[var(--accent)]'
+            }`}
+            strokeWidth={1.85}
+          />
+          <span className="hidden sm:inline">Cabinet</span>
+        </button>
+
         {(workKind === 'book' || workKind === 'screenplay') && (
           <>
             <button
@@ -273,7 +302,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               title={
                 viewMode === 'birdseye'
                   ? 'Return to focused writing (⌘M)'
-                  : `Bird’s-Eye View of all ${
+                  : `Narrative Timeline & Bird’s-Eye View of all ${
                       workKind === 'book' ? 'Chapters' : 'Scenes'
                     } (⌘M)`
               }
@@ -291,8 +320,11 @@ export const TopBar: React.FC<TopBarProps> = ({
                 </>
               ) : (
                 <>
-                  <LayoutGrid className="size-3.5 text-[var(--accent)]" strokeWidth={1.85} />
-                  <span>Bird’s-Eye</span>
+                  <GitCommitHorizontal
+                    className="size-3.5 text-[var(--accent)]"
+                    strokeWidth={1.85}
+                  />
+                  <span>Timeline</span>
                 </>
               )}
             </button>

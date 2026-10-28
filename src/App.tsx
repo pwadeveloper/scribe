@@ -33,6 +33,7 @@ import { TopBar } from './components/TopBar';
 import { SidebarDrawer } from './components/SidebarDrawer';
 import { RichEditor } from './components/RichEditor';
 import { BirdsEyeView } from './components/BirdsEyeView';
+import { ProjectCabinetView } from './components/ProjectCabinetView';
 import { NewWorkModal } from './components/NewWorkModal';
 import { BottomHud } from './components/BottomHud';
 import { ShortcutsModal } from './components/ShortcutsModal';
@@ -46,6 +47,9 @@ export const App: React.FC = () => {
   const [viewMode, setViewMode] = useState<WorkspaceViewMode>('write');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [newWorkModalOpen, setNewWorkModalOpen] = useState(false);
+  const [newWorkDefaultKind, setNewWorkDefaultKind] = useState<
+    WorkKind | undefined
+  >(undefined);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
@@ -432,6 +436,37 @@ export const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
   }, []);
 
+  const handleSelectDocUnit = useCallback(
+    (docId: string, unitId: string) => {
+      setActiveDocId(docId);
+      saveActiveDocIdSync(docId);
+      setDocuments((prev) => {
+        const next = prev.map((d) =>
+          d.id === docId ? { ...d, activeUnitId: unitId } : d
+        );
+        persistDocs(next);
+        return next;
+      });
+      setViewMode('write');
+      setSidebarOpen(false);
+      window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    },
+    [persistDocs]
+  );
+
+  const handleSelectDocBirdsEye = useCallback((id: string) => {
+    setActiveDocId(id);
+    saveActiveDocIdSync(id);
+    setViewMode('birdseye');
+    setSidebarOpen(false);
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+  }, []);
+
+  const handleOpenNewWorkModal = useCallback((defaultKind?: WorkKind) => {
+    setNewWorkDefaultKind(defaultKind);
+    setNewWorkModalOpen(true);
+  }, []);
+
   const handleTogglePin = useCallback(
     (id: string) => {
       setDocuments((prev) => {
@@ -519,6 +554,14 @@ export const App: React.FC = () => {
         if (activeDoc.kind === 'book' || activeDoc.kind === 'screenplay') {
           e.preventDefault();
           setViewMode((v) => (v === 'birdseye' ? 'write' : 'birdseye'));
+          setIsTyping(false);
+        }
+      } else if (key === 'k') {
+        const sel = window.getSelection();
+        const hasRangeSelection = sel && !sel.isCollapsed;
+        if (!hasRangeSelection) {
+          e.preventDefault();
+          setViewMode((v) => (v === 'cabinet' ? 'write' : 'cabinet'));
           setIsTyping(false);
         }
       } else if (key === 'd') {
@@ -659,11 +702,20 @@ export const App: React.FC = () => {
         workKind={activeDoc.kind}
         docTitle={activeDoc.title}
         activeUnitBadge={activeUnitBadge}
-        viewMode={isMultiUnitWork ? viewMode : 'write'}
+        viewMode={
+          viewMode === 'cabinet'
+            ? 'cabinet'
+            : isMultiUnitWork
+            ? viewMode
+            : 'write'
+        }
         onToggleViewMode={() =>
           setViewMode((v) => (v === 'birdseye' ? 'write' : 'birdseye'))
         }
-        onOpenNewWorkModal={() => setNewWorkModalOpen(true)}
+        onToggleCabinetView={() =>
+          setViewMode((v) => (v === 'cabinet' ? 'write' : 'cabinet'))
+        }
+        onOpenNewWorkModal={() => handleOpenNewWorkModal(undefined)}
         saveStatus={saveStatus}
         settings={settings}
         onUpdateSettings={updateSettings}
@@ -681,13 +733,25 @@ export const App: React.FC = () => {
         documents={documents}
         activeDocId={activeDoc.id}
         onSelectDoc={handleSelectDoc}
-        onOpenNewWorkModal={() => setNewWorkModalOpen(true)}
+        onSelectDocUnit={handleSelectDocUnit}
+        onOpenCabinetView={() => setViewMode('cabinet')}
+        onOpenNewWorkModal={() => handleOpenNewWorkModal(undefined)}
         onTogglePin={handleTogglePin}
         onDuplicateDoc={handleDuplicateDoc}
         onDeleteDoc={handleDeleteDoc}
       />
 
-      {isMultiUnitWork && viewMode === 'birdseye' ? (
+      {viewMode === 'cabinet' ? (
+        <ProjectCabinetView
+          documents={documents}
+          activeDocId={activeDoc.id}
+          onSelectDocAndWrite={handleSelectDoc}
+          onSelectDocBirdsEye={handleSelectDocBirdsEye}
+          onOpenNewWorkModal={handleOpenNewWorkModal}
+          onTogglePin={handleTogglePin}
+          onDeleteDoc={handleDeleteDoc}
+        />
+      ) : isMultiUnitWork && viewMode === 'birdseye' ? (
         <BirdsEyeView
           doc={activeDoc}
           activeUnitId={activeUnit?.id || ''}
@@ -707,6 +771,7 @@ export const App: React.FC = () => {
           onAddPart={handleAddPart}
           onRenamePart={handleRenamePart}
           onDeletePart={handleDeletePart}
+          onOpenProjectCabinet={() => setViewMode('cabinet')}
         />
       ) : (
         <RichEditor
@@ -761,6 +826,7 @@ export const App: React.FC = () => {
 
       <NewWorkModal
         open={newWorkModalOpen}
+        defaultKind={newWorkDefaultKind}
         onClose={() => setNewWorkModalOpen(false)}
         onCreateWork={handleCreateWork}
       />

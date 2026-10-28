@@ -340,7 +340,7 @@ export const ScreenplayElementBar: React.FC<ScreenplayElementBarProps> = ({
     label: string;
     mobileLabel: string;
     shortcut: string;
-    icon: React.FC<{ className?: string; strokeWidth?: number }>;
+    icon: React.ComponentType<{ className?: string; strokeWidth?: number | string }>;
   }[] = [
     { id: 'slugline', label: 'Slugline', mobileLabel: 'Slug', shortcut: 'INT/EXT', icon: Clapperboard },
     { id: 'action', label: 'Action', mobileLabel: 'Action', shortcut: '⌘1', icon: AlignLeft },

@@ -48,12 +48,13 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ open, onClose })
 
   const groups = [
     {
-      title: 'Flow, Books & Bird’s-Eye View',
+      title: 'Timeline, Cabinet & Writing Flow',
       items: [
-        { label: 'Toggle Bird’s-Eye View (Chapters / Scenes)', keys: '⌘ M' },
+        { label: 'Toggle Narrative Timeline / Bird’s-Eye', keys: '⌘ M' },
+        { label: 'Toggle Project Filing Cabinet & Folders', keys: '⌘ K' },
         { label: 'Cycle Focus Mode (Off / Paragraph / Spotlight)', keys: '⌘ D' },
         { label: 'Toggle Typewriter Scrolling', keys: '⌘ T' },
-        { label: 'Toggle Library Drawer', keys: '⌘ \\' },
+        { label: 'Toggle Folder Tree Drawer', keys: '⌘ \\' },
         { label: 'Keyboard Shortcuts Reference', keys: '⌘ /' },
       ],
     },

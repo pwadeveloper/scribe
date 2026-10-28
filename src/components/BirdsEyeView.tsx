@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import gsap from 'gsap';
 import {
   Plus,
@@ -6,14 +6,25 @@ import {
   Film,
   ArrowLeft,
   ArrowRight,
+  ArrowUp,
+  ArrowDown,
   Trash2,
   FolderPlus,
   Sparkles,
   ChevronDown,
   ArrowUpRight,
   Layers,
+  GitCommitHorizontal,
+  LayoutGrid,
+  Archive,
+  Clock,
+  MessageSquare,
+  Sun,
+  Moon,
+  Sunrise,
 } from 'lucide-react';
 import {
+  BirdsEyeLayoutMode,
   BookPart,
   BookSectionKind,
   DocumentItem,
@@ -26,6 +37,7 @@ import {
   getUnitBadgeLabel,
 } from '../editorUtils';
 import { canHover, gsapButtonHover, prefersReducedMotion } from '../motion';
+import { SegmentedTickMeter } from './ProjectCabinetView';
 
 interface BirdsEyeViewProps {
   doc: DocumentItem;
@@ -40,13 +52,75 @@ interface BirdsEyeViewProps {
   ) => void;
   onUpdateUnitMeta: (
     unitId: string,
-    patch: Partial<Pick<DocumentUnit, 'title' | 'synopsis' | 'partId' | 'customLabel' | 'slugline'>>
+    patch: Partial<
+      Pick<
+        DocumentUnit,
+        'title' | 'synopsis' | 'partId' | 'customLabel' | 'slugline'
+      >
+    >
   ) => void;
   onMoveUnit: (unitId: string, direction: -1 | 1) => void;
   onDeleteUnit: (unitId: string) => void;
   onAddPart: (title?: string) => void;
   onRenamePart: (partId: string, title: string) => void;
   onDeletePart: (partId: string) => void;
+  onOpenProjectCabinet?: () => void;
+}
+
+interface ParsedSlugline {
+  env: 'INT' | 'EXT' | 'INT/EXT' | 'SCENE';
+  location: string;
+  timeOfDay: 'DAY' | 'NIGHT' | 'DAWN' | 'DUSK' | 'LATER' | 'CONTINUOUS' | string;
+}
+
+function parseSlugline(raw?: string): ParsedSlugline {
+  const clean = (raw || 'INT. LOCATION - DAY').trim().toUpperCase();
+  let env: ParsedSlugline['env'] = 'SCENE';
+  let rest = clean;
+
+  if (clean.startsWith('INT./EXT.') || clean.startsWith('I/E.')) {
+    env = 'INT/EXT';
+    rest = clean.replace(/^(INT\.\/EXT\.|I\/E\.)\s*/, '');
+  } else if (clean.startsWith('INT.')) {
+    env = 'INT';
+    rest = clean.replace(/^INT\.\s*/, '');
+  } else if (clean.startsWith('EXT.')) {
+    env = 'EXT';
+    rest = clean.replace(/^EXT\.\s*/, '');
+  }
+
+  const dashParts = rest.split(/\s+-\s+/);
+  const location = dashParts[0] || 'UNSPECIFIED LOCATION';
+  const timeOfDay = dashParts[1] || 'DAY';
+
+  return { env, location, timeOfDay };
+}
+
+function extractSceneDialogueMeta(html: string): {
+  characters: string[];
+  dialogueCount: number;
+} {
+  const temp = document.createElement('div');
+  temp.innerHTML = html;
+  const set = new Set<string>();
+  let dialogueCount = 0;
+
+  temp.querySelectorAll('p[data-sp-type="character"]').forEach((node) => {
+    const name = (node.textContent || '')
+      .replace(/\(.*?\)/g, '')
+      .trim()
+      .toUpperCase();
+    if (name) set.add(name);
+  });
+
+  temp.querySelectorAll('p[data-sp-type="dialogue"]').forEach(() => {
+    dialogueCount += 1;
+  });
+
+  return {
+    characters: Array.from(set).slice(0, 5),
+    dialogueCount,
+  };
 }
 
 export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
@@ -62,47 +136,132 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
   onAddPart,
   onRenamePart,
   onDeletePart,
+  onOpenProjectCabinet,
 }) => {
-  const [confirmDeleteUnitId, setConfirmDeleteUnitId] = useState<string | null>(null);
+  const [layoutMode, setLayoutMode] = useState<BirdsEyeLayoutMode>('timeline');
+  const [confirmDeleteUnitId, setConfirmDeleteUnitId] = useState<string | null>(
+    null
+  );
   const [matterMenuOpen, setMatterMenuOpen] = useState(false);
+  const [inspectedCabinetUnitId, setInspectedCabinetUnitId] =
+    useState<string>(activeUnitId);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const matterMenuRef = useRef<HTMLDivElement>(null);
+  const cabinetInspectorRef = useRef<HTMLDivElement>(null);
 
   const units = doc.units || [];
   const parts = doc.parts || [];
   const hasParts = doc.kind === 'book' && parts.length > 0;
   const totalMetrics = computeDocumentTotalMetrics(doc);
 
-  const btnHover = gsapButtonHover({ hoverScale: 1.03, hoverY: -0.5, pressScale: 0.96 });
+  const targetWordsPerUnit = doc.kind === 'screenplay' ? 280 : 1200;
 
-  // Staggered GSAP entrance when Bird's-Eye View mounts
+  // Keep cabinet inspector id valid
+  useEffect(() => {
+    if (!units.some((u) => u.id === inspectedCabinetUnitId) && units[0]) {
+      setInspectedCabinetUnitId(activeUnitId || units[0].id);
+    }
+  }, [units, inspectedCabinetUnitId, activeUnitId]);
+
+  const btnHover = gsapButtonHover({
+    hoverScale: 1.03,
+    hoverY: -0.5,
+    pressScale: 0.96,
+  });
+
+  // Precompute unit metrics and cumulative timeline offsets
+  const enrichedUnits = useMemo(() => {
+    let runningWords = 0;
+    let runningMinutes = 0;
+
+    return units.map((unit, index) => {
+      const m = computeMetrics(unit.contentHtml);
+      const startMinute = runningMinutes;
+      const startWord = runningWords;
+      const durationMinutes = Math.max(
+        1,
+        doc.kind === 'screenplay'
+          ? Math.round(m.words / 160) || 1
+          : m.readingTimeMinutes || 1
+      );
+      runningWords += m.words;
+      runningMinutes += durationMinutes;
+
+      const badge = getUnitBadgeLabel(unit, units);
+      const snippet = extractPlainTextSnippet(unit.contentHtml, 170);
+      const parsedSlug =
+        doc.kind === 'screenplay' ? parseSlugline(unit.slugline) : null;
+      const dialogueMeta =
+        doc.kind === 'screenplay'
+          ? extractSceneDialogueMeta(unit.contentHtml)
+          : { characters: [], dialogueCount: 0 };
+
+      const statusLabel =
+        m.words >= targetWordsPerUnit * 0.85
+          ? 'Polished'
+          : m.words >= 80
+          ? 'In Progress'
+          : 'Outline';
+
+      const statusColor =
+        statusLabel === 'Polished'
+          ? '#3B7A57'
+          : statusLabel === 'In Progress'
+          ? 'var(--accent)'
+          : 'var(--ink-3)';
+
+      return {
+        unit,
+        index,
+        metrics: m,
+        startMinute,
+        startWord,
+        durationMinutes,
+        badge,
+        snippet,
+        parsedSlug,
+        dialogueMeta,
+        statusLabel,
+        statusColor,
+      };
+    });
+  }, [units, doc.kind, targetWordsPerUnit]);
+
+  // Staggered GSAP entrance when Bird's-Eye View mounts or switches layout
   useEffect(() => {
     const el = containerRef.current;
     if (!el || prefersReducedMotion()) return;
 
-    const tiles = el.querySelectorAll('[data-birdseye-tile="true"]');
-    gsap.fromTo(
-      el,
-      { opacity: 0, y: 8 },
-      { opacity: 1, y: 0, duration: 0.24, ease: 'power3.out' }
-    );
-    if (tiles.length > 0) {
+    const nodes = el.querySelectorAll('[data-birdseye-tile="true"]');
+    if (nodes.length > 0) {
       gsap.fromTo(
-        tiles,
-        { opacity: 0, y: 12, scale: 0.98 },
+        nodes,
+        { opacity: 0, y: 12, scale: 0.985 },
         {
           opacity: 1,
           y: 0,
           scale: 1,
-          duration: 0.26,
-          stagger: 0.028,
+          duration: 0.25,
+          stagger: 0.025,
           ease: 'power3.out',
           overwrite: 'auto',
         }
       );
     }
-  }, [doc.id]);
+  }, [doc.id, layoutMode]);
+
+  // Animate cabinet inspector card on change
+  useEffect(() => {
+    if (layoutMode !== 'cabinet') return;
+    const el = cabinetInspectorRef.current;
+    if (!el || prefersReducedMotion()) return;
+    gsap.fromTo(
+      el,
+      { y: 6, opacity: 0.8 },
+      { y: 0, opacity: 1, duration: 0.2, ease: 'power3.out', overwrite: 'auto' }
+    );
+  }, [inspectedCabinetUnitId, layoutMode]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -117,25 +276,11 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const extractSceneCharacters = (html: string): string[] => {
-    const temp = document.createElement('div');
-    temp.innerHTML = html;
-    const set = new Set<string>();
-    temp.querySelectorAll('p[data-sp-type="character"]').forEach((node) => {
-      const name = (node.textContent || '')
-        .replace(/\(.*?\)/g, '')
-        .trim()
-        .toUpperCase();
-      if (name) set.add(name);
-    });
-    return Array.from(set).slice(0, 4);
-  };
-
   const handleTileHoverEnter = (e: React.MouseEvent<HTMLDivElement>) => {
     if (prefersReducedMotion() || !canHover()) return;
     gsap.to(e.currentTarget, {
-      y: -3,
-      scale: 1.008,
+      y: -2.5,
+      scale: 1.005,
       duration: 0.18,
       ease: 'power2.out',
       overwrite: 'auto',
@@ -153,15 +298,457 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
     });
   };
 
-  const renderTile = (unit: DocumentUnit) => {
-    const globalIdx = units.findIndex((u) => u.id === unit.id);
+  const scrollToTimelineUnit = (unitId: string) => {
+    const node = document.getElementById(`timeline-node-${unitId}`);
+    if (node) {
+      node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (!prefersReducedMotion()) {
+        gsap.fromTo(
+          node,
+          { boxShadow: '0 0 0 3px var(--accent)' },
+          {
+            boxShadow:
+              unitId === activeUnitId
+                ? '0 0 0 2px var(--accent), var(--elevation-raised)'
+                : 'var(--elevation-raised)',
+            duration: 0.9,
+            ease: 'power2.out',
+          }
+        );
+      }
+    }
+  };
+
+  const renderTimeOfDayBadge = (tod: string) => {
+    const isNight = tod.includes('NIGHT') || tod.includes('EVENING');
+    const isDawnDusk =
+      tod.includes('DAWN') || tod.includes('DUSK') || tod.includes('MORNING');
+    const Icon = isNight ? Moon : isDawnDusk ? Sunrise : Sun;
+
+    return (
+      <span
+        style={{
+          backgroundColor: isNight
+            ? 'rgba(30, 41, 59, 0.14)'
+            : 'var(--accent-soft)',
+          color: isNight ? 'var(--ink-1)' : 'var(--accent)',
+        }}
+        className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.05em]"
+      >
+        <Icon className="size-2.5" />
+        {tod}
+      </span>
+    );
+  };
+
+  // ============================================================================
+  // 1. TIMELINE NODE RENDERER (Primary Narrative Spine View)
+  // ============================================================================
+  const renderTimelineNode = (item: (typeof enrichedUnits)[number]) => {
+    const {
+      unit,
+      index,
+      metrics: unitMetrics,
+      startMinute,
+      durationMinutes,
+      badge,
+      snippet,
+      parsedSlug,
+      dialogueMeta,
+      statusLabel,
+      statusColor,
+    } = item;
     const isActive = unit.id === activeUnitId;
-    const badge = getUnitBadgeLabel(unit, units);
-    const unitMetrics = computeMetrics(unit.contentHtml);
-    const snippet = extractPlainTextSnippet(unit.contentHtml, 140);
     const isConfirmingDelete = confirmDeleteUnitId === unit.id;
-    const sceneChars =
-      doc.kind === 'screenplay' ? extractSceneCharacters(unit.contentHtml) : [];
+    const partObj = parts.find((p) => p.id === unit.partId);
+
+    // Check if this unit starts a new Part along the timeline spine
+    const prevUnit = index > 0 ? units[index - 1] : null;
+    const isFirstInPart =
+      hasParts && unit.partId && (!prevUnit || prevUnit.partId !== unit.partId);
+
+    return (
+      <React.Fragment key={unit.id}>
+        {/* Part Milestone Banner on the Timeline Spine (for Books with Parts) */}
+        {isFirstInPart && partObj && (
+          <div className="relative flex items-center gap-4 pb-2 pt-4">
+            <div
+              style={{
+                backgroundColor: 'var(--accent)',
+                color: 'var(--bg-canvas)',
+              }}
+              className="relative z-10 flex size-8 shrink-0 items-center justify-center rounded-xl font-mono text-xs font-bold shadow-sm sm:w-28"
+            >
+              <Layers className="size-3.5 sm:mr-1.5" />
+              <span className="hidden sm:inline">PART</span>
+            </div>
+            <div
+              style={{
+                backgroundColor: 'var(--bg-surface)',
+                border: '1px solid var(--border-subtle)',
+              }}
+              className="flex flex-1 flex-wrap items-center justify-between gap-2 rounded-xl px-4 py-2.5"
+            >
+              <input
+                type="text"
+                value={partObj.title}
+                onChange={(e) => onRenamePart(partObj.id, e.target.value)}
+                placeholder="Part Title (e.g., Part I: The Departure)"
+                className="min-w-[200px] flex-1 bg-transparent font-serif text-lg font-semibold text-[var(--ink-1)] focus:outline-none"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onAddUnit('chapter', partObj.id)}
+                  className="flex items-center gap-1 rounded-lg bg-[var(--bg-elevated)] px-2.5 py-1 text-xs font-medium text-[var(--ink-2)] hover:text-[var(--ink-1)]"
+                >
+                  <Plus className="size-3" />
+                  <span>Add Chapter</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Timeline Row */}
+        <div
+          data-birdseye-tile="true"
+          className="group relative flex items-stretch gap-3 sm:gap-5"
+        >
+          {/* Left Spine Column: Timestamp + Sequence Node + Vertical Connector */}
+          <div className="relative flex w-10 shrink-0 flex-col items-center sm:w-28 sm:items-end sm:pr-3">
+            {/* Vertical Spine Line */}
+            {index < enrichedUnits.length - 1 && (
+              <div
+                style={{ backgroundColor: 'var(--border-strong)' }}
+                className="absolute bottom-0 right-5 top-8 w-[1.5px] sm:right-[19px]"
+              />
+            )}
+
+            <div className="flex items-center gap-2.5 pt-3">
+              {/* Cumulative Runtime / Reading Offset (Desktop) */}
+              <div className="hidden text-right font-mono text-[10px] leading-tight text-[var(--ink-3)] [font-variant-numeric:tabular-nums] sm:block">
+                <div className="font-semibold text-[var(--ink-2)]">
+                  +{String(startMinute).padStart(2, '0')}:00
+                </div>
+                <div>
+                  {doc.kind === 'screenplay'
+                    ? `~${durationMinutes}p`
+                    : `${durationMinutes}m read`}
+                </div>
+              </div>
+
+              {/* Circular Timeline Node Marker */}
+              <button
+                type="button"
+                onClick={() => onSelectUnitAndWrite(unit.id)}
+                title={`Jump into ${badge}`}
+                style={{
+                  backgroundColor: isActive
+                    ? 'var(--accent)'
+                    : 'var(--bg-elevated)',
+                  color: isActive ? '#FAF7F2' : 'var(--ink-1)',
+                  boxShadow: isActive
+                    ? '0 0 0 3px var(--accent-soft)'
+                    : '0 0 0 1.5px var(--border-strong)',
+                }}
+                className="relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-bold transition-transform duration-150 group-hover:scale-110 [font-variant-numeric:tabular-nums]"
+              >
+                {String(index + 1).padStart(2, '0')}
+              </button>
+            </div>
+          </div>
+
+          {/* Right Timeline Card (Inspired by Image 2 Card Anatomy + Screenplay Stripboard) */}
+          <div
+            id={`timeline-node-${unit.id}`}
+            onMouseEnter={handleTileHoverEnter}
+            onMouseLeave={handleTileHoverLeave}
+            style={{
+              backgroundColor: 'var(--bg-elevated)',
+              boxShadow: isActive
+                ? '0 0 0 2px var(--accent), var(--elevation-raised)'
+                : 'var(--elevation-raised)',
+            }}
+            className="mb-4 flex-1 rounded-2xl p-4 transition-shadow duration-150 sm:p-5"
+          >
+            {/* Card Header Row: Status Pill + Badge + Time-of-Day + Reorder Controls */}
+            <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {/* Status Dot Pill (Image 2 style: • In Progress / • Polished) */}
+                <span
+                  style={{ backgroundColor: 'var(--bg-surface)' }}
+                  className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium text-[var(--ink-2)]"
+                >
+                  <span
+                    style={{ backgroundColor: statusColor }}
+                    className="size-1.5 rounded-full"
+                  />
+                  {statusLabel}
+                </span>
+
+                {/* Unit Badge Pill */}
+                <span
+                  style={{
+                    backgroundColor: isActive
+                      ? 'var(--accent-soft)'
+                      : 'var(--bg-surface)',
+                    color: isActive ? 'var(--accent)' : 'var(--ink-2)',
+                  }}
+                  className="rounded-md px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.04em]"
+                >
+                  {badge}
+                </span>
+
+                {/* Screenplay INT/EXT & Time-of-Day Pills */}
+                {doc.kind === 'screenplay' && parsedSlug && (
+                  <>
+                    <span
+                      style={{
+                        backgroundColor:
+                          parsedSlug.env === 'EXT'
+                            ? 'rgba(59, 122, 87, 0.14)'
+                            : 'var(--bg-surface)',
+                        color:
+                          parsedSlug.env === 'EXT'
+                            ? '#3B7A57'
+                            : 'var(--ink-1)',
+                      }}
+                      className="rounded-md px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-[0.06em]"
+                    >
+                      {parsedSlug.env}.
+                    </span>
+                    {renderTimeOfDayBadge(parsedSlug.timeOfDay)}
+                  </>
+                )}
+
+                {isActive && (
+                  <span className="rounded-md bg-[var(--accent)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">
+                    Active
+                  </span>
+                )}
+              </div>
+
+              {/* Action Controls */}
+              <div className="flex items-center gap-1 opacity-100 transition-opacity duration-150 focus-within:opacity-100 [@media(hover:hover)_and_(pointer:fine)]:opacity-0 [@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100">
+                {hasParts && (
+                  <select
+                    aria-label="Assign chapter to Part"
+                    value={unit.partId || ''}
+                    onChange={(e) =>
+                      onUpdateUnitMeta(unit.id, {
+                        partId: e.target.value || undefined,
+                      })
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ backgroundColor: 'var(--bg-surface)' }}
+                    className="mr-1 h-7 rounded-md px-1.5 text-xs text-[var(--ink-2)] focus:outline-none sm:h-6 sm:text-[11px]"
+                  >
+                    <option value="">Unassigned</option>
+                    {parts.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.title || 'Untitled Part'}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                <button
+                  type="button"
+                  disabled={index === 0}
+                  onClick={() => onMoveUnit(unit.id, -1)}
+                  aria-label="Move earlier in timeline"
+                  title="Move earlier in timeline"
+                  className="flex size-7 items-center justify-center rounded-md text-[var(--ink-3)] hover:bg-[var(--bg-subtle-hover)] hover:text-[var(--ink-1)] disabled:opacity-30 sm:size-6"
+                >
+                  <ArrowUp className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  disabled={index === units.length - 1}
+                  onClick={() => onMoveUnit(unit.id, 1)}
+                  aria-label="Move later in timeline"
+                  title="Move later in timeline"
+                  className="flex size-7 items-center justify-center rounded-md text-[var(--ink-3)] hover:bg-[var(--bg-subtle-hover)] hover:text-[var(--ink-1)] disabled:opacity-30 sm:size-6"
+                >
+                  <ArrowDown className="size-3.5" />
+                </button>
+                {units.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteUnitId(unit.id)}
+                    aria-label="Delete section"
+                    title="Delete section"
+                    className="flex size-7 items-center justify-center rounded-md text-[var(--ink-3)] hover:bg-[var(--bg-subtle-hover)] hover:text-red-600 sm:size-6"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Main Clickable Content Area */}
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+              <div className="lg:col-span-8">
+                {doc.kind === 'screenplay' && (
+                  <div className="mb-1 font-mono text-xs font-semibold uppercase tracking-[0.04em] text-[var(--accent)]">
+                    {unit.slugline || 'INT. LOCATION - DAY'}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => onSelectUnitAndWrite(unit.id)}
+                  className="block w-full text-start"
+                >
+                  <h3 className="font-serif text-xl font-semibold leading-snug text-[var(--ink-1)] transition-colors group-hover:text-[var(--accent)]">
+                    {unit.title.trim() ||
+                      (doc.kind === 'screenplay'
+                        ? parsedSlug?.location || 'Untitled Scene'
+                        : `Untitled ${badge}`)}
+                  </h3>
+                  <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-[var(--ink-2)] sm:text-[13px]">
+                    {snippet}
+                  </p>
+                </button>
+
+                {/* Image 2-inspired Metadata Row: ↳ dialogue/paragraphs · reading/screen time */}
+                <div className="mt-3 flex flex-wrap items-center gap-3 font-mono text-[11px] text-[var(--ink-3)] [font-variant-numeric:tabular-nums]">
+                  <span className="text-[var(--ink-4)]">↳</span>
+                  {doc.kind === 'screenplay' ? (
+                    <span className="inline-flex items-center gap-1">
+                      <MessageSquare className="size-3" />
+                      {dialogueMeta.dialogueCount}{' '}
+                      {dialogueMeta.dialogueCount === 1
+                        ? 'dialogue block'
+                        : 'dialogue blocks'}
+                    </span>
+                  ) : (
+                    <span>
+                      {unitMetrics.paragraphs}{' '}
+                      {unitMetrics.paragraphs === 1
+                        ? 'paragraph'
+                        : 'paragraphs'}
+                    </span>
+                  )}
+                  <span>·</span>
+                  <span className="inline-flex items-center gap-1">
+                    <Clock className="size-3" />
+                    {durationMinutes} min{' '}
+                    {doc.kind === 'screenplay' ? 'screen time' : 'read'}
+                  </span>
+
+                  {/* Character Badges for Screenplays */}
+                  {doc.kind === 'screenplay' &&
+                    dialogueMeta.characters.length > 0 && (
+                      <>
+                        <span>·</span>
+                        <div className="flex flex-wrap items-center gap-1">
+                          {dialogueMeta.characters.map((ch) => (
+                            <span
+                              key={ch}
+                              style={{ backgroundColor: 'var(--bg-surface)' }}
+                              className="rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[var(--ink-2)]"
+                            >
+                              {ch}
+                            </span>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                </div>
+              </div>
+
+              {/* Right Column: Synopsis Beat Note + Segmented Tick Meter (Image 2) */}
+              <div className="flex flex-col justify-between gap-2.5 border-t border-[var(--border-subtle)] pt-3 lg:col-span-4 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
+                <div>
+                  <label className="mb-1 block font-mono text-[10px] uppercase tracking-[0.06em] text-[var(--ink-3)]">
+                    {doc.kind === 'screenplay'
+                      ? 'Scene Beat / Intent'
+                      : 'Chapter Synopsis'}
+                  </label>
+                  <input
+                    type="text"
+                    value={unit.synopsis || ''}
+                    onChange={(e) =>
+                      onUpdateUnitMeta(unit.id, { synopsis: e.target.value })
+                    }
+                    placeholder={
+                      doc.kind === 'screenplay'
+                        ? 'What turns in this scene?'
+                        : 'Key narrative beat…'
+                    }
+                    style={{ backgroundColor: 'var(--bg-surface)' }}
+                    className="w-full rounded-lg px-2.5 py-1.5 text-base text-[var(--ink-2)] placeholder:text-[var(--ink-4)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] sm:text-xs"
+                  />
+                </div>
+
+                {/* Segmented Tick Progress Bar + Write Action (Image 2 Footer) */}
+                {!isConfirmingDelete ? (
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <SegmentedTickMeter
+                      current={unitMetrics.words}
+                      target={targetWordsPerUnit}
+                      segments={10}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => onSelectUnitAndWrite(unit.id)}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--ink-1)] transition-colors hover:bg-[var(--accent)] hover:text-white"
+                    >
+                      <span>Write</span>
+                      <ArrowUpRight className="size-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-2 pt-1 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteUnitId(null)}
+                      className="rounded-md px-2 py-1 text-[var(--ink-2)] hover:bg-[var(--bg-subtle-hover)]"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onDeleteUnit(unit.id);
+                        setConfirmDeleteUnitId(null);
+                      }}
+                      className="rounded-md bg-red-600/15 px-2.5 py-1 font-medium text-red-600 hover:bg-red-600/25"
+                    >
+                      Delete {badge}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </React.Fragment>
+    );
+  };
+
+  // ============================================================================
+  // 2. CARDS TILE RENDERER (Image 2 Kanban/Grid Card Anatomy)
+  // ============================================================================
+  const renderCardTile = (unit: DocumentUnit) => {
+    const item = enrichedUnits.find((e) => e.unit.id === unit.id);
+    if (!item) return null;
+
+    const {
+      index: globalIdx,
+      metrics: unitMetrics,
+      durationMinutes,
+      badge,
+      snippet,
+      parsedSlug,
+      dialogueMeta,
+      statusLabel,
+      statusColor,
+    } = item;
+    const isActive = unit.id === activeUnitId;
+    const isConfirmingDelete = confirmDeleteUnitId === unit.id;
 
     return (
       <div
@@ -177,10 +764,20 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
         }}
         className="group relative flex flex-col justify-between rounded-2xl p-4 transition-shadow duration-150"
       >
-        {/* Top Row: Badge + Part Assignment + Reorder / Delete */}
         <div>
+          {/* Top Row: Status Pill + Badge + Reorder */}
           <div className="mb-2.5 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span
+                style={{ backgroundColor: 'var(--bg-surface)' }}
+                className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10px] font-medium text-[var(--ink-2)]"
+              >
+                <span
+                  style={{ backgroundColor: statusColor }}
+                  className="size-1.5 rounded-full"
+                />
+                {statusLabel}
+              </span>
               <span
                 style={{
                   backgroundColor: isActive
@@ -188,15 +785,10 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
                     : 'var(--bg-surface)',
                   color: isActive ? 'var(--accent)' : 'var(--ink-2)',
                 }}
-                className="rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.05em]"
+                className="rounded-md px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.05em]"
               >
                 {badge}
               </span>
-              {isActive && (
-                <span className="text-[11px] font-medium text-[var(--accent)]">
-                  Current
-                </span>
-              )}
             </div>
 
             <div className="flex items-center gap-1 opacity-100 transition-opacity duration-150 focus-within:opacity-100 [@media(hover:hover)_and_(pointer:fine)]:opacity-0 [@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100">
@@ -231,7 +823,7 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
                 }}
                 aria-label="Move earlier"
                 title="Move earlier"
-                className="flex size-8 items-center justify-center rounded-md text-[var(--ink-3)] hover:bg-[var(--bg-subtle-hover)] hover:text-[var(--ink-1)] disabled:opacity-30 sm:size-6"
+                className="flex size-7 items-center justify-center rounded-md text-[var(--ink-3)] hover:bg-[var(--bg-subtle-hover)] hover:text-[var(--ink-1)] disabled:opacity-30 sm:size-6"
               >
                 <ArrowLeft className="size-3.5" />
               </button>
@@ -244,7 +836,7 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
                 }}
                 aria-label="Move later"
                 title="Move later"
-                className="flex size-8 items-center justify-center rounded-md text-[var(--ink-3)] hover:bg-[var(--bg-subtle-hover)] hover:text-[var(--ink-1)] disabled:opacity-30 sm:size-6"
+                className="flex size-7 items-center justify-center rounded-md text-[var(--ink-3)] hover:bg-[var(--bg-subtle-hover)] hover:text-[var(--ink-1)] disabled:opacity-30 sm:size-6"
               >
                 <ArrowRight className="size-3.5" />
               </button>
@@ -257,7 +849,7 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
                   }}
                   aria-label="Delete section"
                   title="Delete section"
-                  className="flex size-8 items-center justify-center rounded-md text-[var(--ink-3)] hover:bg-[var(--bg-subtle-hover)] hover:text-red-600 sm:size-6"
+                  className="flex size-7 items-center justify-center rounded-md text-[var(--ink-3)] hover:bg-[var(--bg-subtle-hover)] hover:text-red-600 sm:size-6"
                 >
                   <Trash2 className="size-3.5" />
                 </button>
@@ -265,14 +857,12 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
             </div>
           </div>
 
-          {/* Screenplay Slugline Pill */}
           {doc.kind === 'screenplay' && (
-            <div className="mb-1.5 font-mono text-xs font-semibold uppercase tracking-[0.04em] text-[var(--ink-1)]">
+            <div className="mb-1.5 font-mono text-xs font-semibold uppercase tracking-[0.04em] text-[var(--accent)]">
               {unit.slugline || 'INT. LOCATION - DAY'}
             </div>
           )}
 
-          {/* Clickable main body to fly into this chapter/scene */}
           <button
             type="button"
             onClick={() => onSelectUnitAndWrite(unit.id)}
@@ -281,20 +871,30 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
             <h3 className="font-serif text-lg font-semibold leading-snug text-[var(--ink-1)] group-hover:text-[var(--accent)]">
               {unit.title.trim() ||
                 (doc.kind === 'screenplay'
-                  ? 'Untitled Scene'
+                  ? parsedSlug?.location || 'Untitled Scene'
                   : `Untitled ${badge}`)}
             </h3>
 
-            {/* Live Prose / Dialogue Preview */}
             <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-[var(--ink-2)]">
               {snippet}
             </p>
           </button>
 
-          {/* Character pills for Screenplay scenes */}
-          {doc.kind === 'screenplay' && sceneChars.length > 0 && (
-            <div className="mt-2.5 flex flex-wrap gap-1">
-              {sceneChars.map((ch) => (
+          {/* Image 2 style ↳ metadata line */}
+          <div className="mt-2.5 flex items-center gap-2 font-mono text-[11px] text-[var(--ink-3)] [font-variant-numeric:tabular-nums]">
+            <span className="text-[var(--ink-4)]">↳</span>
+            {doc.kind === 'screenplay' ? (
+              <span>{dialogueMeta.dialogueCount} cues</span>
+            ) : (
+              <span>{unitMetrics.paragraphs} ¶</span>
+            )}
+            <span>·</span>
+            <span>{durationMinutes}m</span>
+          </div>
+
+          {doc.kind === 'screenplay' && dialogueMeta.characters.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {dialogueMeta.characters.map((ch) => (
                 <span
                   key={ch}
                   style={{ backgroundColor: 'var(--bg-surface)' }}
@@ -306,7 +906,6 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
             </div>
           )}
 
-          {/* Quick Synopsis / Index-card Note */}
           <div className="mt-3">
             <input
               type="text"
@@ -328,18 +927,18 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
           </div>
         </div>
 
-        {/* Tile Footer */}
+        {/* Tile Footer with SegmentedTickMeter (Image 2) */}
         {!isConfirmingDelete ? (
-          <div className="mt-3.5 flex items-center justify-between border-t border-[var(--border-subtle)] pt-2.5 text-[11px] text-[var(--ink-3)] [font-variant-numeric:tabular-nums]">
-            <span>
-              {unitMetrics.words.toLocaleString()}{' '}
-              {unitMetrics.words === 1 ? 'word' : 'words'} ·{' '}
-              {unitMetrics.readingTimeMinutes || 1}m
-            </span>
+          <div className="mt-3.5 flex items-center justify-between border-t border-[var(--border-subtle)] pt-3">
+            <SegmentedTickMeter
+              current={unitMetrics.words}
+              target={targetWordsPerUnit}
+              segments={10}
+            />
             <button
               type="button"
               onClick={() => onSelectUnitAndWrite(unit.id)}
-              className="flex items-center gap-1 font-medium text-[var(--ink-2)] transition-colors group-hover:text-[var(--accent)]"
+              className="flex items-center gap-1 text-xs font-medium text-[var(--ink-2)] transition-colors group-hover:text-[var(--accent)]"
             >
               <span>Write</span>
               <ArrowUpRight className="size-3.5" />
@@ -370,24 +969,220 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
     );
   };
 
+  // ============================================================================
+  // 3. CABINET STACK RENDERER FOR CHAPTERS / SCENES (Image 3 inside Bird's-Eye)
+  // ============================================================================
+  const renderUnitCabinet = () => {
+    const inspectedItem =
+      enrichedUnits.find((e) => e.unit.id === inspectedCabinetUnitId) ||
+      enrichedUnits[0];
+    const tabOffsets = ['6%', '34%', '60%', '18%', '48%'];
+
+    if (!inspectedItem) return null;
+
+    return (
+      <div className="mx-auto max-w-2xl pt-2">
+        {/* Dark Monospace Inspector Card Rising from Top of Cabinet (Image 3) */}
+        <div className="relative mx-auto w-[88%] sm:w-[80%]">
+          <div
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              border: '1px solid var(--border-strong)',
+            }}
+            className="absolute -inset-x-4 -bottom-4 top-6 rounded-t-xl"
+          />
+
+          <div
+            ref={cabinetInspectorRef}
+            style={{
+              backgroundColor: '#1B1A18',
+              color: '#EAE4DC',
+              boxShadow: '0 16px 34px -8px rgba(0, 0, 0, 0.35)',
+              border: '1px solid rgba(255,255,255,0.1)',
+            }}
+            className="relative z-10 rounded-xl p-5 sm:p-6"
+          >
+            <div className="mb-3 flex items-center justify-between font-mono text-[11px] tracking-[0.06em] text-[#8F887F]">
+              <span>
+                {doc.kind === 'screenplay' ? 'SCENE' : 'SEC'}{' '}
+                {String(inspectedItem.index + 1).padStart(3, '0')} /{' '}
+                {String(enrichedUnits.length).padStart(3, '0')}
+              </span>
+              <span className="uppercase text-[#D4845A]">
+                {inspectedItem.badge}
+              </span>
+            </div>
+
+            {doc.kind === 'screenplay' && (
+              <div className="mb-2 font-mono text-xs font-bold uppercase tracking-[0.05em] text-white">
+                {inspectedItem.unit.slugline || 'INT. LOCATION - DAY'}
+              </div>
+            )}
+
+            <p className="line-clamp-4 font-mono text-xs leading-relaxed text-[#EAE4DC]/90 sm:text-[13px]">
+              "{inspectedItem.snippet}"
+            </p>
+
+            <div className="mt-5 flex flex-wrap items-end justify-between gap-4 border-t border-white/10 pt-4">
+              <div>
+                <div className="font-mono text-xs font-semibold uppercase tracking-[0.05em] text-white">
+                  {inspectedItem.unit.title || inspectedItem.badge}
+                </div>
+                <div className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.04em] text-[#8F887F]">
+                  {inspectedItem.metrics.words.toLocaleString()} WORDS · EST.{' '}
+                  {inspectedItem.durationMinutes} MIN
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => onSelectUnitAndWrite(inspectedItem.unit.id)}
+                style={{ backgroundColor: '#EAE4DC', color: '#141312' }}
+                className="flex h-8 items-center gap-1 rounded-lg px-3.5 font-mono text-[11px] font-semibold uppercase tracking-[0.04em] transition-transform active:scale-95"
+              >
+                <span>OPEN {inspectedItem.badge.toUpperCase()}</span>
+                <ArrowUpRight className="size-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Stepped Manila Folder Tabs for every Chapter or Scene */}
+        <div className="relative mt-3 flex flex-col items-center">
+          {enrichedUnits.map((item, idx) => {
+            const isInspected = item.unit.id === inspectedItem.unit.id;
+            const widthPercent = Math.min(98, 90 + idx * 1.1);
+            const tabLeft = tabOffsets[idx % tabOffsets.length];
+
+            return (
+              <div
+                key={item.unit.id}
+                onMouseEnter={() => setInspectedCabinetUnitId(item.unit.id)}
+                onClick={() => setInspectedCabinetUnitId(item.unit.id)}
+                onDoubleClick={() => onSelectUnitAndWrite(item.unit.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    onSelectUnitAndWrite(item.unit.id);
+                  } else if (e.key === ' ') {
+                    e.preventDefault();
+                    setInspectedCabinetUnitId(item.unit.id);
+                  }
+                }}
+                style={{
+                  width: `${widthPercent}%`,
+                  zIndex: 10 + idx,
+                  transform: isInspected
+                    ? 'translateY(-4px)'
+                    : 'translateY(0px)',
+                }}
+                className="group relative -mt-1 cursor-pointer select-none transition-transform duration-150"
+              >
+                <div
+                  style={{
+                    marginLeft: tabLeft,
+                    backgroundColor: isInspected
+                      ? 'var(--bg-elevated)'
+                      : 'var(--bg-surface)',
+                    borderTop: `1px solid ${
+                      isInspected ? 'var(--accent)' : 'var(--border-strong)'
+                    }`,
+                    borderLeft: `1px solid ${
+                      isInspected ? 'var(--accent)' : 'var(--border-strong)'
+                    }`,
+                    borderRight: `1px solid ${
+                      isInspected ? 'var(--accent)' : 'var(--border-strong)'
+                    }`,
+                  }}
+                  className="inline-flex h-6 max-w-[230px] items-center gap-1.5 rounded-t-lg px-3"
+                >
+                  <span className="font-mono text-[10px] font-bold text-[var(--accent)]">
+                    {String(idx + 1).padStart(2, '0')}
+                  </span>
+                  <span className="truncate font-mono text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--ink-1)]">
+                    {item.unit.title.trim() ||
+                      (doc.kind === 'screenplay'
+                        ? item.parsedSlug?.location
+                        : item.badge)}
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    backgroundColor: isInspected
+                      ? 'var(--bg-elevated)'
+                      : 'var(--bg-surface)',
+                    borderTop: `1px solid ${
+                      isInspected ? 'var(--accent)' : 'var(--border-strong)'
+                    }`,
+                    borderLeft: '1px solid var(--border-strong)',
+                    borderRight: '1px solid var(--border-strong)',
+                  }}
+                  className="flex h-8 w-full items-center justify-between rounded-t-sm px-4"
+                >
+                  <span className="font-mono text-[10px] text-[var(--ink-3)]">
+                    {item.badge.toUpperCase()} · {item.metrics.words}W
+                  </span>
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectUnitAndWrite(item.unit.id);
+                    }}
+                    className="font-mono text-[10px] font-semibold text-[var(--accent)] hover:underline"
+                  >
+                    WRITE →
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Cabinet Drawer Front Plate */}
+          <div
+            style={{
+              zIndex: 30 + enrichedUnits.length,
+              backgroundColor: 'var(--bg-surface)',
+              border: '1px solid var(--border-strong)',
+              boxShadow: 'var(--elevation-raised)',
+            }}
+            className="flex h-20 w-full flex-col items-center justify-center rounded-b-xl rounded-t-sm"
+          >
+            <div className="mb-1.5 h-1.5 w-12 rounded-full bg-[var(--border-strong)]" />
+            <div className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--ink-2)] [font-variant-numeric:tabular-nums]">
+              {doc.title.trim() || 'MANUSCRIPT'} /{' '}
+              {String(enrichedUnits.length).padStart(2, '0')}{' '}
+              {doc.kind === 'screenplay' ? 'SCENES' : 'SECTIONS'}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const totalDurationMinutes = enrichedUnits.reduce(
+    (acc, item) => acc + item.durationMinutes,
+    0
+  );
+
   return (
     <div
       ref={containerRef}
-      className="mx-auto max-w-5xl px-6 pb-28 pt-24 sm:px-10"
+      className="mx-auto max-w-5xl px-4 pb-28 pt-20 sm:px-10 sm:pt-24"
     >
       {/* Top Overview Header */}
-      <div className="mb-8 flex flex-col justify-between gap-6 border-b border-[var(--border-subtle)] pb-7 md:flex-row md:items-end">
+      <div className="mb-6 flex flex-col justify-between gap-6 border-b border-[var(--border-subtle)] pb-6 md:flex-row md:items-end">
         <div className="flex-1">
           <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.07em] text-[var(--accent)]">
             {doc.kind === 'book' ? (
               <>
                 <BookOpen className="size-3.5" />
-                <span>Book Bird’s-Eye View</span>
+                <span>Book Narrative Architecture</span>
               </>
             ) : (
               <>
                 <Film className="size-3.5" />
-                <span>Screenplay Scene Cards</span>
+                <span>Screenplay Scene Stripboard &amp; Timeline</span>
               </>
             )}
           </div>
@@ -494,7 +1289,9 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
                       className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-start font-medium text-[var(--ink-1)] hover:bg-[var(--bg-subtle-hover)]"
                     >
                       <span>Add Prologue</span>
-                      <span className="text-[10px] text-[var(--ink-3)]">Front</span>
+                      <span className="text-[10px] text-[var(--ink-3)]">
+                        Front
+                      </span>
                     </button>
                     <button
                       type="button"
@@ -509,7 +1306,9 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
                       className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-start font-medium text-[var(--ink-1)] hover:bg-[var(--bg-subtle-hover)]"
                     >
                       <span>Add Epilogue</span>
-                      <span className="text-[10px] text-[var(--ink-3)]">Back</span>
+                      <span className="text-[10px] text-[var(--ink-3)]">
+                        Back
+                      </span>
                     </button>
                     <button
                       type="button"
@@ -524,7 +1323,9 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
                       className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-start font-medium text-[var(--ink-1)] hover:bg-[var(--bg-subtle-hover)]"
                     >
                       <span>Add Interlude</span>
-                      <span className="text-[10px] text-[var(--ink-3)]">Mid</span>
+                      <span className="text-[10px] text-[var(--ink-3)]">
+                        Mid
+                      </span>
                     </button>
                     <button
                       type="button"
@@ -535,7 +1336,9 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
                       className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-start font-medium text-[var(--ink-1)] hover:bg-[var(--bg-subtle-hover)]"
                     >
                       <span>Add Foreword / Note</span>
-                      <span className="text-[10px] text-[var(--ink-3)]">Custom</span>
+                      <span className="text-[10px] text-[var(--ink-3)]">
+                        Custom
+                      </span>
                     </button>
                   </div>
                 )}
@@ -574,8 +1377,168 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
         </div>
       </div>
 
-      {/* Book with Optional Parts Grouping vs Flat Grid */}
-      {hasParts ? (
+      {/* ==================================================================== */}
+      {/* IMAGE 2-INSPIRED VIEW SWITCHER BAR + PACING STRIP                    */}
+      {/* ==================================================================== */}
+      <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        {/* Segmented View Switcher: Timeline | Cards | Cabinet */}
+        <div
+          style={{ backgroundColor: 'var(--bg-surface)' }}
+          className="inline-flex items-center gap-1 self-start rounded-xl p-1"
+        >
+          {(
+            [
+              {
+                id: 'timeline',
+                label: 'Timeline',
+                icon: GitCommitHorizontal,
+              },
+              {
+                id: 'cards',
+                label: 'Cards',
+                icon: LayoutGrid,
+              },
+              {
+                id: 'cabinet',
+                label: 'Cabinet',
+                icon: Archive,
+              },
+            ] as {
+              id: BirdsEyeLayoutMode;
+              label: string;
+              icon: React.FC<{ className?: string }>;
+            }[]
+          ).map((tab) => {
+            const active = layoutMode === tab.id;
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setLayoutMode(tab.id)}
+                style={{
+                  backgroundColor: active
+                    ? 'var(--bg-elevated)'
+                    : 'transparent',
+                  boxShadow: active ? 'var(--elevation-raised)' : 'none',
+                  color: active ? 'var(--ink-1)' : 'var(--ink-3)',
+                }}
+                className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium transition-all duration-150"
+              >
+                <Icon className="size-3.5 text-[var(--accent)]" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* All-Projects Cabinet Link */}
+        {onOpenProjectCabinet && (
+          <button
+            type="button"
+            onClick={onOpenProjectCabinet}
+            className="inline-flex items-center gap-1.5 self-start text-xs font-medium text-[var(--ink-3)] transition-colors hover:text-[var(--accent)] sm:self-auto"
+          >
+            <Archive className="size-3.5" />
+            <span>Browse All Works in Project Filing Cabinet →</span>
+          </button>
+        )}
+      </div>
+
+      {/* Interactive Story Pacing & Rhythm Strip (Visible in Timeline Mode) */}
+      {layoutMode === 'timeline' && enrichedUnits.length > 0 && (
+        <div
+          style={{
+            backgroundColor: 'var(--bg-surface)',
+            border: '1px solid var(--border-subtle)',
+          }}
+          className="mb-8 rounded-2xl p-4"
+        >
+          <div className="mb-2 flex items-center justify-between text-[11px] font-medium text-[var(--ink-3)] [font-variant-numeric:tabular-nums]">
+            <span className="font-mono uppercase tracking-[0.06em]">
+              {doc.kind === 'screenplay'
+                ? 'Scene Pacing & Runtime Stripboard'
+                : 'Narrative Pacing & Chapter Rhythm'}
+            </span>
+            <span className="font-mono">
+              Est. Total: {totalDurationMinutes} min · Click segment to jump
+            </span>
+          </div>
+
+          {/* Proportional Segment Track */}
+          <div className="flex h-6 w-full gap-1 overflow-hidden rounded-lg bg-[var(--bg-canvas)] p-1">
+            {enrichedUnits.map((item) => {
+              const weight = Math.max(15, item.metrics.words);
+              const isCurrent = item.unit.id === activeUnitId;
+              return (
+                <button
+                  key={item.unit.id}
+                  type="button"
+                  onClick={() => scrollToTimelineUnit(item.unit.id)}
+                  title={`${item.badge}: ${
+                    item.unit.title || item.unit.slugline || 'Untitled'
+                  } (${item.metrics.words} words)`}
+                  style={{
+                    flexGrow: weight,
+                    backgroundColor: isCurrent
+                      ? 'var(--accent)'
+                      : 'var(--ink-3)',
+                    opacity: isCurrent ? 1 : 0.45,
+                  }}
+                  className="h-full min-w-[14px] rounded transition-opacity hover:opacity-90"
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* BODY: TIMELINE vs CARDS vs CABINET                                   */}
+      {/* ==================================================================== */}
+      {layoutMode === 'timeline' ? (
+        <div className="relative">
+          {enrichedUnits.map(renderTimelineNode)}
+
+          {/* Bottom Timeline Spine Terminus: Add Next Scene / Chapter */}
+          <div className="flex items-center gap-3 pt-2 sm:gap-5">
+            <div className="flex w-10 justify-center sm:w-28 sm:justify-end sm:pr-3">
+              <button
+                type="button"
+                onClick={() =>
+                  onAddUnit(
+                    doc.kind === 'screenplay' ? 'scene' : 'chapter',
+                    parts[parts.length - 1]?.id
+                  )
+                }
+                style={{
+                  backgroundColor: 'var(--bg-surface)',
+                  border: '1.5px dashed var(--border-strong)',
+                }}
+                className="flex size-8 items-center justify-center rounded-full text-[var(--ink-3)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                aria-label="Add next node on timeline"
+              >
+                <Plus className="size-3.5" />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                onAddUnit(
+                  doc.kind === 'screenplay' ? 'scene' : 'chapter',
+                  parts[parts.length - 1]?.id
+                )
+              }
+              className="text-xs font-medium text-[var(--ink-3)] transition-colors hover:text-[var(--accent)]"
+            >
+              + Append {doc.kind === 'screenplay' ? 'Next Scene' : 'Next Chapter'}{' '}
+              to Timeline
+            </button>
+          </div>
+        </div>
+      ) : layoutMode === 'cabinet' ? (
+        renderUnitCabinet()
+      ) : hasParts ? (
         <div className="space-y-10">
           {parts.map((part: BookPart) => {
             const partUnits = units.filter((u) => u.partId === part.id);
@@ -628,31 +1591,29 @@ export const BirdsEyeView: React.FC<BirdsEyeViewProps> = ({
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {partUnits.map(renderTile)}
+                    {partUnits.map(renderCardTile)}
                   </div>
                 )}
               </section>
             );
           })}
 
-          {/* Unassigned chapters if any exist while Parts are enabled */}
           {units.some((u) => !u.partId) && (
             <section className="space-y-4">
               <div className="border-b border-[var(--border-subtle)] pb-2 font-serif text-lg font-medium text-[var(--ink-2)]">
                 Unassigned Sections
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {units.filter((u) => !u.partId).map(renderTile)}
+                {units.filter((u) => !u.partId).map(renderCardTile)}
               </div>
             </section>
           )}
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {units.map(renderTile)}
+          {units.map(renderCardTile)}
         </div>
       )}
     </div>
   );
 };
-

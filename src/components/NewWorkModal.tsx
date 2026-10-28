@@ -6,6 +6,7 @@ import { canHover, gsapButtonHover, prefersReducedMotion } from '../motion';
 
 interface NewWorkModalProps {
   open: boolean;
+  defaultKind?: WorkKind;
   onClose: () => void;
   onCreateWork: (
     kind: WorkKind,
@@ -16,10 +17,13 @@ interface NewWorkModalProps {
 
 export const NewWorkModal: React.FC<NewWorkModalProps> = ({
   open,
+  defaultKind,
   onClose,
   onCreateWork,
 }) => {
-  const [selectedKind, setSelectedKind] = useState<WorkKind>('book');
+  const [selectedKind, setSelectedKind] = useState<WorkKind>(
+    defaultKind || 'book'
+  );
   const [title, setTitle] = useState('');
   const [includeParts, setIncludeParts] = useState(false);
 
@@ -29,6 +33,9 @@ export const NewWorkModal: React.FC<NewWorkModalProps> = ({
 
   useEffect(() => {
     if (!open) return;
+    if (defaultKind) {
+      setSelectedKind(defaultKind);
+    }
     setTitle('');
     // Only auto-focus input on desktop fine pointers so mobile keyboard doesn't pop open immediately
     const timer = window.setTimeout(() => {
@@ -77,7 +84,7 @@ export const NewWorkModal: React.FC<NewWorkModalProps> = ({
     name: string;
     tagline: string;
     description: string;
-    icon: React.FC<{ className?: string; strokeWidth?: number }>;
+    icon: React.ComponentType<{ className?: string; strokeWidth?: number | string }>;
   }[] = [
     {
       id: 'book',

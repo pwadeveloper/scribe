@@ -5,7 +5,8 @@ export type FontSizeStep = 'sm' | 'base' | 'lg' | 'xl';
 export type MeasureStep = 'narrow' | 'balanced' | 'wide';
 
 export type WorkKind = 'book' | 'screenplay' | 'essay';
-export type WorkspaceViewMode = 'write' | 'birdseye';
+export type WorkspaceViewMode = 'write' | 'birdseye' | 'cabinet';
+export type BirdsEyeLayoutMode = 'timeline' | 'cards' | 'cabinet';
 
 export type BookSectionKind =
   | 'prologue'
